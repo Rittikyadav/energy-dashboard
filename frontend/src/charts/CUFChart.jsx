@@ -1,38 +1,216 @@
 import Chart from "react-apexcharts"
 
-function CUFChart({ trendData, plantCapacity }) {
+function CUFChart({
+    trendData,
+    plantCapacity
+}) {
 
-    // TIME DATA
+    // ============================================================
+    // PLANT CAPACITY
+    // ============================================================
 
-    const timeData = trendData.map(
+    const capacity =
+        Number.parseFloat(
+            plantCapacity
+        ) || 30
 
-        (item) =>
 
-            `${item.loghh}:${item.logmi}`
+    // ============================================================
+    // SORT DATA CHRONOLOGICALLY
+    // ============================================================
 
-    )
+    const sortedData =
+        [...(Array.isArray(trendData)
+            ? trendData
+            : [])]
+            .filter(Boolean)
+            .sort(
+                (a, b) =>
+                    new Date(
+                        a?.ts || 0
+                    ).getTime() -
+                    new Date(
+                        b?.ts || 0
+                    ).getTime()
+            )
 
-    // CUF DATA
 
-    const cufData = trendData.map((item) => {
+    // ============================================================
+    // BUILD CUF TREND
+    //
+    // kWh is cumulative.
+    //
+    // We calculate:
+    //
+    // interval generation =
+    // current kWh - previous kWh
+    //
+    // Then:
+    //
+    // cumulative daily generation
+    // -------------------------------- × 100
+    // plant capacity × 24
+    //
+    // This keeps the chart consistent with the CUF card.
+    // ============================================================
 
-        const generation =
+    let previousKwh = null
 
-            parseFloat(item.kwhgen || 0)
+    let cumulativeGeneration = 0
 
-        const capacity =
 
-            parseFloat(plantCapacity || 1)
+    const chartData =
+        sortedData.map(
+            (item) => {
 
-        const cuf =
+                const currentKwh =
+                    Number.parseFloat(
+                        item?.kwh
+                    )
 
-            (generation / capacity) * 100
 
-        return Number(cuf.toFixed(2))
+                // ----------------------------------------------------
+                // INVALID KWH
+                // ----------------------------------------------------
 
-    })
+                if (
+                    !Number.isFinite(
+                        currentKwh
+                    )
+                ) {
 
+                    return null
+                }
+
+
+                // ----------------------------------------------------
+                // FIRST READING
+                // ----------------------------------------------------
+
+                if (
+                    previousKwh === null
+                ) {
+
+                    previousKwh =
+                        currentKwh
+
+
+                    return {
+
+                        time:
+                            `${String(
+                                item?.loghh ??
+                                ""
+                            ).padStart(
+                                2,
+                                "0"
+                            )}:${String(
+                                item?.logmi ??
+                                ""
+                            ).padStart(
+                                2,
+                                "0"
+                            )}`,
+
+                        cuf: 0,
+
+                        generation: 0,
+
+                        cumulativeKwh:
+                            currentKwh
+                    }
+                }
+
+
+                // ----------------------------------------------------
+                // METER DIFFERENCE
+                // ----------------------------------------------------
+
+                const difference =
+                    currentKwh -
+                    previousKwh
+
+
+                // ----------------------------------------------------
+                // HANDLE METER RESET
+                //
+                // If cumulative meter suddenly becomes smaller,
+                // don't create negative generation.
+                // ----------------------------------------------------
+
+                if (
+                    difference >= 0
+                ) {
+
+                    cumulativeGeneration +=
+                        difference
+
+                }
+
+
+                previousKwh =
+                    currentKwh
+
+
+                // ----------------------------------------------------
+                // DAILY CUF
+                // ----------------------------------------------------
+
+                const cuf =
+                    capacity > 0
+                        ? (
+                            cumulativeGeneration /
+                            (
+                                capacity *
+                                24
+                            )
+                        ) *
+                        100
+                        : 0
+
+
+                return {
+
+                    time:
+                        `${String(
+                            item?.loghh ??
+                            ""
+                        ).padStart(
+                            2,
+                            "0"
+                        )}:${String(
+                            item?.logmi ??
+                            ""
+                        ).padStart(
+                            2,
+                            "0"
+                        )}`,
+
+                    cuf:
+                        Number(
+                            cuf.toFixed(
+                                2
+                            )
+                        ),
+
+                    generation:
+                        Number(
+                            cumulativeGeneration.toFixed(
+                                2
+                            )
+                        ),
+
+                    cumulativeKwh:
+                        currentKwh
+                }
+            }
+        )
+            .filter(Boolean)
+
+
+    // ============================================================
     // CHART OPTIONS
+    // ============================================================
 
     const chartOptions = {
 
@@ -65,9 +243,7 @@ function CUFChart({ trendData, plantCapacity }) {
                     pan: true,
 
                     reset: true
-
                 }
-
             },
 
             zoom: {
@@ -77,7 +253,6 @@ function CUFChart({ trendData, plantCapacity }) {
                 type: "x",
 
                 autoScaleYaxis: true
-
             },
 
             animations: {
@@ -86,35 +261,34 @@ function CUFChart({ trendData, plantCapacity }) {
 
                 easing: "linear",
 
-                speed: 1200,
+                speed: 600,
 
                 animateGradually: {
 
-                    enabled: true,
-
-                    delay: 80
-
+                    enabled: false
                 },
 
                 dynamicAnimation: {
 
                     enabled: true,
 
-                    speed: 1000
-
+                    speed: 500
                 }
-
             }
-
         },
+
 
         theme: {
 
             mode: "light"
-
         },
 
-        colors: ["#10b981"],
+
+        colors: [
+
+            "#10b981"
+        ],
+
 
         fill: {
 
@@ -132,11 +306,13 @@ function CUFChart({ trendData, plantCapacity }) {
 
                 opacityTo: 0.03,
 
-                stops: [0, 100]
-
+                stops: [
+                    0,
+                    100
+                ]
             }
-
         },
+
 
         stroke: {
 
@@ -146,19 +322,22 @@ function CUFChart({ trendData, plantCapacity }) {
 
             lineCap: "round",
 
-            colors: ["#10b981"]
-
+            colors: [
+                "#10b981"
+            ]
         },
+
 
         dataLabels: {
 
             enabled: false
-
         },
+
 
         grid: {
 
-            borderColor: "#e5e7eb",
+            borderColor:
+                "#e5e7eb",
 
             strokeDashArray: 6,
 
@@ -171,10 +350,9 @@ function CUFChart({ trendData, plantCapacity }) {
                 top: 10,
 
                 bottom: 10
-
             }
-
         },
+
 
         markers: {
 
@@ -183,10 +361,9 @@ function CUFChart({ trendData, plantCapacity }) {
             hover: {
 
                 size: 7
-
             }
-
         },
+
 
         tooltip: {
 
@@ -199,24 +376,35 @@ function CUFChart({ trendData, plantCapacity }) {
             style: {
 
                 fontSize: "14px"
-
             },
 
             y: {
 
-                formatter: function (value) {
+                formatter:
+                    function (
+                        value
+                    ) {
 
-                    return value.toFixed(2) + " %"
-
-                }
-
+                        return (
+                            Number(
+                                value
+                            ).toFixed(
+                                2
+                            ) +
+                            " %"
+                        )
+                    }
             }
-
         },
+
 
         xaxis: {
 
-            categories: timeData,
+            categories:
+                chartData.map(
+                    (item) =>
+                        item.time
+                ),
 
             tickAmount: 6,
 
@@ -226,26 +414,25 @@ function CUFChart({ trendData, plantCapacity }) {
 
                 style: {
 
-                    colors: "#64748b",
+                    colors:
+                        "#64748b",
 
-                    fontSize: "12px",
+                    fontSize:
+                        "12px",
 
-                    fontWeight: 600
-
+                    fontWeight:
+                        600
                 }
-
             },
 
             axisBorder: {
 
                 show: false
-
             },
 
             axisTicks: {
 
                 show: false
-
             },
 
             crosshairs: {
@@ -254,75 +441,106 @@ function CUFChart({ trendData, plantCapacity }) {
 
                 stroke: {
 
-                    color: "#22c55e",
+                    color:
+                        "#22c55e",
 
                     width: 1,
 
                     dashArray: 4
-
                 }
-
             }
-
         },
+
 
         yaxis: {
 
-            decimalsInFloat: 1,
+            min: 0,
+
+            decimalsInFloat: 2,
 
             labels: {
 
-                formatter: function (value) {
+                formatter:
+                    function (
+                        value
+                    ) {
 
-                    return value.toFixed(1)
-
-                },
+                        return (
+                            Number(
+                                value
+                            ).toFixed(
+                                2
+                            )
+                        )
+                    },
 
                 style: {
 
-                    colors: "#64748b",
+                    colors:
+                        "#64748b",
 
-                    fontSize: "12px",
+                    fontSize:
+                        "12px",
 
-                    fontWeight: 600
-
+                    fontWeight:
+                        600
                 }
+            },
 
+            title: {
+
+                text:
+                    "CUF (%)",
+
+                style: {
+
+                    color:
+                        "#64748b",
+
+                    fontSize:
+                        "12px",
+
+                    fontWeight:
+                        600
+                }
             }
-
         },
+
 
         legend: {
 
             position: "top",
 
-            horizontalAlign: "center",
+            horizontalAlign:
+                "center",
 
             floating: false,
 
-            fontSize: "14px",
+            fontSize:
+                "14px",
 
-            fontWeight: 700,
+            fontWeight:
+                700,
 
             itemMargin: {
 
                 horizontal: 15,
 
                 vertical: 8
-
             },
 
             labels: {
 
-                colors: "#374151"
-
+                colors:
+                    "#374151"
             }
-
         }
-
     }
 
+
+    // ============================================================
     // SERIES
+    // ============================================================
 
     const chartSeries = [
 
@@ -330,11 +548,18 @@ function CUFChart({ trendData, plantCapacity }) {
 
             name: "CUF %",
 
-            data: cufData
-
+            data:
+                chartData.map(
+                    (item) =>
+                        item.cuf
+                )
         }
-
     ]
+
+
+    // ============================================================
+    // RENDER
+    // ============================================================
 
     return (
 
@@ -354,11 +579,12 @@ function CUFChart({ trendData, plantCapacity }) {
 
                     <p className="text-gray-500 mt-2">
 
-                        Interactive live CUF performance monitoring
+                        Daily CUF calculated from cumulative meter generation
 
                     </p>
 
                 </div>
+
 
                 {/* LIVE BADGE */}
 
@@ -382,13 +608,18 @@ function CUFChart({ trendData, plantCapacity }) {
 
             </div>
 
+
             {/* CHART */}
 
             <Chart
 
-                options={chartOptions}
+                options={
+                    chartOptions
+                }
 
-                series={chartSeries}
+                series={
+                    chartSeries
+                }
 
                 type="area"
 
@@ -397,7 +628,6 @@ function CUFChart({ trendData, plantCapacity }) {
             />
 
         </div>
-
     )
 }
 

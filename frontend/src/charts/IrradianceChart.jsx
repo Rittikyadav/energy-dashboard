@@ -1,38 +1,72 @@
 import Chart from "react-apexcharts"
 
-function IrradianceChart({ trendData, irradiance }) {
 
-    // TIME DATA
+function IrradianceChart({
+    irradiance = 0
+}) {
 
-    const timeData = trendData.map(
+    // ============================================================
+    // SOLAR IRRADIATION REFERENCE
+    //
+    // Example:
+    //
+    // August DNI = 123.700
+    // August days = 31
+    //
+    // ASI = 123.700 / 31
+    //     = 3.99 kWh/m²/day
+    // ============================================================
 
-        (item) =>
+    const irradiation =
+        Number.parseFloat(
+            irradiance
+        ) || 0
 
-            `${item.loghh}:${item.logmi}`
 
-    )
+    // ============================================================
+    // CHART DATA
+    //
+    // This is intentionally ONE daily reference value.
+    //
+    // We do NOT create fake timestamps because there is no
+    // physical irradiance sensor providing hourly W/m² readings.
+    // ============================================================
 
-    // IRRADIANCE DATA
+    const chartSeries = [
 
-    const irradianceData = trendData.map(() =>
+        {
 
-        parseFloat(irradiance || 0)
+            name:
+                "Solar Irradiation Reference",
 
-    )
+            data: [
+                irradiation
+            ]
 
+        }
+
+    ]
+
+
+    // ============================================================
     // CHART OPTIONS
+    // ============================================================
 
     const chartOptions = {
 
         chart: {
 
-            id: "irradiance-chart",
+            id:
+                "irradiation-reference-chart",
 
-            type: "area",
+            type:
+                "area",
 
-            height: 360,
+            height:
+                360,
 
-            background: "#ffffff",
+            background:
+                "#ffffff",
 
             toolbar: {
 
@@ -42,29 +76,19 @@ function IrradianceChart({ trendData, irradiance }) {
 
                     download: true,
 
-                    selection: true,
+                    selection: false,
 
-                    zoom: true,
+                    zoom: false,
 
-                    zoomin: true,
+                    zoomin: false,
 
-                    zoomout: true,
+                    zoomout: false,
 
-                    pan: true,
+                    pan: false,
 
-                    reset: true
+                    reset: false
 
                 }
-
-            },
-
-            zoom: {
-
-                enabled: true,
-
-                type: "x",
-
-                autoScaleYaxis: true
 
             },
 
@@ -72,153 +96,208 @@ function IrradianceChart({ trendData, irradiance }) {
 
                 enabled: true,
 
-                easing: "linear",
+                easing:
+                    "easeinout",
 
-                speed: 1200,
-
-                animateGradually: {
-
-                    enabled: true,
-
-                    delay: 80
-
-                },
-
-                dynamicAnimation: {
-
-                    enabled: true,
-
-                    speed: 1000
-
-                }
+                speed:
+                    1000
 
             }
 
         },
+
 
         theme: {
 
-            mode: "light"
+            mode:
+                "light"
 
         },
 
-        colors: ["#f59e0b"],
+
+        colors: [
+
+            "#f59e0b"
+
+        ],
+
 
         fill: {
 
-            type: "gradient",
+            type:
+                "gradient",
 
             gradient: {
 
-                shade: "light",
+                shade:
+                    "light",
 
-                type: "vertical",
+                type:
+                    "vertical",
 
-                shadeIntensity: 0.5,
+                shadeIntensity:
+                    0.5,
 
-                opacityFrom: 0.45,
+                opacityFrom:
+                    0.45,
 
-                opacityTo: 0.03,
+                opacityTo:
+                    0.03,
 
-                stops: [0, 100]
+                stops: [
+                    0,
+                    100
+                ]
 
             }
 
         },
+
 
         stroke: {
 
-            curve: "smooth",
+            curve:
+                "smooth",
 
-            width: 4,
+            width:
+                4,
 
-            lineCap: "round",
+            lineCap:
+                "round",
 
-            colors: ["#f59e0b"]
+            colors: [
+
+                "#f59e0b"
+
+            ]
 
         },
+
 
         dataLabels: {
 
-            enabled: false
+            enabled:
+                false
 
         },
+
 
         grid: {
 
-            borderColor: "#e5e7eb",
+            borderColor:
+                "#e5e7eb",
 
-            strokeDashArray: 6,
+            strokeDashArray:
+                6,
 
             padding: {
 
-                left: 10,
+                left:
+                    10,
 
-                right: 10,
+                right:
+                    10,
 
-                top: 10,
+                top:
+                    20,
 
-                bottom: 10
+                bottom:
+                    10
 
             }
 
         },
+
 
         markers: {
 
-            size: 0,
+            size:
+                8,
+
+            colors: [
+
+                "#f59e0b"
+
+            ],
+
+            strokeColors:
+                "#ffffff",
+
+            strokeWidth:
+                3,
 
             hover: {
 
-                size: 7
+                size:
+                    10
 
             }
 
         },
 
+
         tooltip: {
 
-            theme: "light",
+            theme:
+                "light",
 
-            shared: true,
+            shared:
+                false,
 
-            intersect: false,
+            intersect:
+                true,
 
             style: {
 
-                fontSize: "14px"
+                fontSize:
+                    "14px"
 
             },
 
             y: {
 
-                formatter: function (value) {
+                formatter:
+                    function (value) {
 
-                    return value.toFixed(2) + " W/m²"
+                        return (
 
-                }
+                            Number(
+                                value
+                            ).toFixed(2)
+
+                            +
+
+                            " kWh/m²/day"
+
+                        )
+
+                    }
 
             }
 
         },
 
+
         xaxis: {
 
-            categories: timeData,
+            categories: [
 
-            tickAmount: 6,
+                "Daily Reference"
+
+            ],
 
             labels: {
 
-                rotate: -45,
-
                 style: {
 
-                    colors: "#64748b",
+                    colors:
+                        "#64748b",
 
-                    fontSize: "12px",
+                    fontSize:
+                        "12px",
 
-                    fontWeight: 600
+                    fontWeight:
+                        600
 
                 }
 
@@ -226,53 +305,73 @@ function IrradianceChart({ trendData, irradiance }) {
 
             axisBorder: {
 
-                show: false
+                show:
+                    false
 
             },
 
             axisTicks: {
 
-                show: false
-
-            },
-
-            crosshairs: {
-
-                show: true,
-
-                stroke: {
-
-                    color: "#22c55e",
-
-                    width: 1,
-
-                    dashArray: 4
-
-                }
+                show:
+                    false
 
             }
 
         },
+
 
         yaxis: {
 
-            decimalsInFloat: 1,
+            min:
+                0,
+
+            forceNiceScale:
+                true,
+
+            decimalsInFloat:
+                2,
 
             labels: {
 
-                formatter: function (value) {
+                formatter:
+                    function (value) {
 
-                    return value.toFixed(1)
+                        return Number(
+                            value
+                        ).toFixed(1)
 
-                },
+                    },
 
                 style: {
 
-                    colors: "#64748b",
+                    colors:
+                        "#64748b",
 
-                    fontSize: "12px",
+                    fontSize:
+                        "12px",
 
-                    fontWeight: 600
+                    fontWeight:
+                        600
+
+                }
+
+            },
+
+            title: {
+
+                text:
+                    "Solar Irradiation (kWh/m²/day)",
+
+                style: {
+
+                    color:
+                        "#64748b",
+
+                    fontSize:
+                        "12px",
+
+                    fontWeight:
+                        600
 
                 }
 
@@ -280,29 +379,38 @@ function IrradianceChart({ trendData, irradiance }) {
 
         },
 
+
         legend: {
 
-            position: "top",
+            position:
+                "top",
 
-            horizontalAlign: "center",
+            horizontalAlign:
+                "center",
 
-            floating: false,
+            floating:
+                false,
 
-            fontSize: "14px",
+            fontSize:
+                "14px",
 
-            fontWeight: 700,
+            fontWeight:
+                700,
 
             itemMargin: {
 
-                horizontal: 15,
+                horizontal:
+                    15,
 
-                vertical: 8
+                vertical:
+                    8
 
             },
 
             labels: {
 
-                colors: "#374151"
+                colors:
+                    "#374151"
 
             }
 
@@ -310,59 +418,49 @@ function IrradianceChart({ trendData, irradiance }) {
 
     }
 
-    // SERIES
 
-    const chartSeries = [
-
-        {
-
-            name: "Irradiance",
-
-            data: irradianceData
-
-        }
-
-    ]
+    // ============================================================
+    // UI
+    // ============================================================
 
     return (
 
         <div className="bg-white rounded-[32px] shadow-2xl border border-gray-100 p-8 overflow-hidden transition-all duration-500">
 
-            {/* HEADER */}
+
+            {/* ====================================================
+                HEADER
+            ==================================================== */}
 
             <div className="flex items-center justify-between mb-8">
+
 
                 <div>
 
                     <h2 className="text-3xl font-black text-gray-800 tracking-tight">
 
-                        Real-Time Irradiance Trend
+                        Solar Irradiation Reference
 
                     </h2>
 
                     <p className="text-gray-500 mt-2">
 
-                        Interactive live solar irradiance monitoring
+                        Daily solar resource value used for PR analysis
 
                     </p>
 
                 </div>
 
-                {/* LIVE BADGE */}
 
-                <div className="flex items-center gap-3 bg-green-100 px-5 py-2 rounded-full shadow-md">
+                {/* REFERENCE BADGE */}
 
-                    <div className="relative">
+                <div className="flex items-center gap-3 bg-orange-100 px-5 py-2 rounded-full shadow-md">
 
-                        <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                    <div className="w-3 h-3 bg-orange-500 rounded-full"></div>
 
-                        <div className="absolute inset-0 w-3 h-3 bg-green-400 rounded-full animate-ping"></div>
+                    <span className="text-orange-700 font-bold text-sm tracking-wide">
 
-                    </div>
-
-                    <span className="text-green-700 font-bold text-sm tracking-wide">
-
-                        LIVE
+                        REFERENCE
 
                     </span>
 
@@ -370,13 +468,20 @@ function IrradianceChart({ trendData, irradiance }) {
 
             </div>
 
-            {/* CHART */}
+
+            {/* ====================================================
+                CHART
+            ==================================================== */}
 
             <Chart
 
-                options={chartOptions}
+                options={
+                    chartOptions
+                }
 
-                series={chartSeries}
+                series={
+                    chartSeries
+                }
 
                 type="area"
 
@@ -385,8 +490,8 @@ function IrradianceChart({ trendData, irradiance }) {
             />
 
         </div>
-
     )
 }
+
 
 export default IrradianceChart

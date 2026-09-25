@@ -1,427 +1,222 @@
-import { useEffect, useState } from "react"
+import React, { useState } from "react"
+import { useNavigate } from "react-router-dom"
+import {
+    LayoutDashboard,
+    Users,
+    Link2,
+    LogOut,
+    ShieldCheck,
+    Menu,
+    X
+} from "lucide-react"
 
-import axios from "axios"
+import SuperAdminOverview from "./superadmin/SuperAdminOverview"
+import SuperAdminClients from "./superadmin/SuperAdminClients"
+import SuperAdminAssignments from "./superadmin/SuperAdminAssignments"
 
-import Sidebar from "../components/Sidebar"
+const AdminPanel = () => {
+    const navigate = useNavigate()
 
-function AdminPanel() {
+    const [activeTab, setActiveTab] = useState("overview")
+    const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
-    // CLIENT DATA
+    const user = JSON.parse(localStorage.getItem("user") || "{}")
 
-    const [clients, setClients] =
-        useState([])
-
-    // FORM DATA
-
-    const [formData, setFormData] =
-        useState({
-
-            clientName: "",
-
-            projectName: "",
-
-            username: "",
-
-            password: ""
-
-        })
-
-    // FETCH CLIENTS
-
-    useEffect(() => {
-
-        fetchClients()
-
-    }, [])
-
-    const fetchClients = async () => {
-
-        try {
-
-            const res =
-                await axios.get(
-
-                    "http://localhost:8000/api/clients"
-
-                )
-
-            setClients(res.data)
-
-        } catch (error) {
-
-            console.log(error)
-
-        }
-
+    const handleLogout = () => {
+        localStorage.removeItem("token")
+        localStorage.removeItem("user")
+        navigate("/login")
     }
 
-    // HANDLE INPUT
-
-    const handleChange = (e) => {
-
-        setFormData({
-
-            ...formData,
-
-            [e.target.name]:
-                e.target.value
-
-        })
-
-    }
-
-    // ADD CLIENT
-
-    const handleAddClient = async () => {
-
-        try {
-
-            await axios.post(
-
-                "http://localhost:8000/api/clients",
-
-                formData
-
-            )
-
-            fetchClients()
-
-            setFormData({
-
-                clientName: "",
-
-                projectName: "",
-
-                username: "",
-
-                password: ""
-
-            })
-
-            alert("Client Added Successfully")
-
-        } catch (error) {
-
-            console.log(error)
-
+    const navigation = [
+        {
+            key: "overview",
+            label: "Overview",
+            icon: LayoutDashboard
+        },
+        {
+            key: "clients",
+            label: "Clients",
+            icon: Users
+        },
+        {
+            key: "assignments",
+            label: "Assignments",
+            icon: Link2
         }
+    ]
 
+    const renderContent = () => {
+        switch (activeTab) {
+            case "clients":
+                return <SuperAdminClients />
+
+            case "assignments":
+                return <SuperAdminAssignments />
+
+            case "overview":
+            default:
+                return <SuperAdminOverview />
+        }
     }
 
     return (
+        <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-green-50">
 
-        <div className="min-h-screen bg-gradient-to-br from-slate-100 to-gray-200 flex">
+            {/* =====================================================
+                HEADER
+            ===================================================== */}
+            <header className="sticky top-0 z-50 border-b border-gray-200/70 bg-white/90 shadow-sm backdrop-blur-xl">
 
-            {/* SIDEBAR */}
+                <div className="mx-auto flex h-20 max-w-[1600px] items-center justify-between px-4 sm:px-6 lg:px-8">
 
-            <Sidebar />
+                    {/* BRAND */}
+                    <div className="flex items-center gap-3">
 
-            {/* MAIN */}
-
-            <main className="flex-1 p-8 overflow-y-auto">
-
-                {/* HEADER */}
-
-                <div className="mb-10">
-
-                    <h1 className="text-5xl font-black text-gray-800 tracking-tight">
-
-                        Admin Control Panel
-
-                    </h1>
-
-                    <p className="text-gray-500 mt-3 text-lg">
-
-                        Manage clients, projects & authentication system
-
-                    </p>
-
-                </div>
-
-                {/* ADD CLIENT FORM */}
-
-                <div className="bg-white rounded-3xl shadow-2xl p-8 border border-gray-100 mb-10">
-
-                    <div className="flex items-center justify-between mb-8">
+                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 text-white shadow-lg">
+                            <ShieldCheck size={23} />
+                        </div>
 
                         <div>
+                            <h1 className="text-lg font-extrabold tracking-tight text-gray-900">
+                                Suncraft Energy
+                            </h1>
 
-                            <h2 className="text-3xl font-black text-gray-800">
+                            <p className="text-xs font-semibold text-green-600">
+                                Super Admin Control Center
+                            </p>
+                        </div>
 
-                                Add New Client
+                    </div>
 
-                            </h2>
 
-                            <p className="text-gray-500 mt-2">
+                    {/* DESKTOP USER AREA */}
+                    <div className="hidden items-center gap-4 md:flex">
 
-                                Register new solar monitoring clients
+                        <div className="text-right">
 
+                            <p className="text-sm font-bold text-gray-800">
+                                {user?.username || user?.name || "Super Admin"}
+                            </p>
+
+                            <p className="text-xs font-medium text-gray-400">
+                                Super Administrator
                             </p>
 
                         </div>
 
-                        <div className="bg-blue-100 text-blue-700 px-5 py-2 rounded-full font-bold">
-
-                            ADMIN ACCESS
-
+                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-gray-700 to-gray-900 text-sm font-bold text-white shadow-md">
+                            SA
                         </div>
+
+                        <button
+                            onClick={handleLogout}
+                            className="flex items-center gap-2 rounded-xl border border-red-100 bg-red-50 px-4 py-2.5 text-sm font-bold text-red-600 transition hover:bg-red-100"
+                        >
+                            <LogOut size={17} />
+                            Logout
+                        </button>
 
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-                        {/* CLIENT NAME */}
-
-                        <div>
-
-                            <label className="block text-gray-700 font-semibold mb-3">
-
-                                Client Name
-
-                            </label>
-
-                            <input
-
-                                type="text"
-
-                                name="clientName"
-
-                                placeholder="Enter Client Name"
-
-                                value={formData.clientName}
-
-                                onChange={handleChange}
-
-                                className="w-full border border-gray-200 rounded-2xl px-5 py-4 text-lg outline-none shadow-sm focus:ring-2 focus:ring-blue-400"
-
-                            />
-
-                        </div>
-
-                        {/* PROJECT NAME */}
-
-                        <div>
-
-                            <label className="block text-gray-700 font-semibold mb-3">
-
-                                Project Name
-
-                            </label>
-
-                            <input
-
-                                type="text"
-
-                                name="projectName"
-
-                                placeholder="Enter Project Name"
-
-                                value={formData.projectName}
-
-                                onChange={handleChange}
-
-                                className="w-full border border-gray-200 rounded-2xl px-5 py-4 text-lg outline-none shadow-sm focus:ring-2 focus:ring-green-400"
-
-                            />
-
-                        </div>
-
-                        {/* USERNAME */}
-
-                        <div>
-
-                            <label className="block text-gray-700 font-semibold mb-3">
-
-                                Username
-
-                            </label>
-
-                            <input
-
-                                type="text"
-
-                                name="username"
-
-                                placeholder="Enter Username"
-
-                                value={formData.username}
-
-                                onChange={handleChange}
-
-                                className="w-full border border-gray-200 rounded-2xl px-5 py-4 text-lg outline-none shadow-sm focus:ring-2 focus:ring-purple-400"
-
-                            />
-
-                        </div>
-
-                        {/* PASSWORD */}
-
-                        <div>
-
-                            <label className="block text-gray-700 font-semibold mb-3">
-
-                                Password
-
-                            </label>
-
-                            <input
-
-                                type="password"
-
-                                name="password"
-
-                                placeholder="Enter Password"
-
-                                value={formData.password}
-
-                                onChange={handleChange}
-
-                                className="w-full border border-gray-200 rounded-2xl px-5 py-4 text-lg outline-none shadow-sm focus:ring-2 focus:ring-red-400"
-
-                            />
-
-                        </div>
-
-                    </div>
-
-                    {/* BUTTON */}
-
+                    {/* MOBILE MENU BUTTON */}
                     <button
-
-                        onClick={handleAddClient}
-
-                        className="mt-8 bg-gradient-to-r from-blue-600 to-cyan-500 text-white px-8 py-4 rounded-2xl text-lg font-bold shadow-xl hover:scale-[1.03] hover:shadow-2xl transition-all duration-300"
-
+                        onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                        className="flex h-10 w-10 items-center justify-center rounded-xl bg-gray-100 text-gray-700 md:hidden"
                     >
-
-                        + Add Client
-
+                        {mobileMenuOpen ? (
+                            <X size={21} />
+                        ) : (
+                            <Menu size={21} />
+                        )}
                     </button>
 
                 </div>
 
-                {/* CLIENT DATABASE */}
 
-                <div className="bg-white rounded-3xl shadow-2xl p-8 border border-gray-100">
+                {/* MOBILE MENU */}
+                {mobileMenuOpen && (
 
-                    <div className="flex items-center justify-between mb-8">
+                    <div className="border-t border-gray-100 bg-white p-4 md:hidden">
 
-                        <div>
+                        <div className="mb-4 rounded-2xl bg-gray-50 p-4">
 
-                            <h2 className="text-3xl font-black text-gray-800">
+                            <p className="text-sm font-bold text-gray-800">
+                                {user?.username || user?.name || "Super Admin"}
+                            </p>
 
-                                Client Database
-
-                            </h2>
-
-                            <p className="text-gray-500 mt-2">
-
-                                Registered client access records
-
+                            <p className="mt-1 text-xs text-gray-400">
+                                Super Administrator
                             </p>
 
                         </div>
 
-                        <div className="bg-green-100 text-green-700 px-5 py-2 rounded-full font-bold">
-
-                            LIVE DATABASE
-
-                        </div>
+                        <button
+                            onClick={handleLogout}
+                            className="flex w-full items-center gap-2 rounded-xl bg-red-50 px-4 py-3 text-sm font-bold text-red-600"
+                        >
+                            <LogOut size={17} />
+                            Logout
+                        </button>
 
                     </div>
 
-                    <div className="overflow-x-auto rounded-2xl border border-gray-100">
+                )}
 
-                        <table className="w-full border-collapse">
+            </header>
 
-                            <thead>
 
-                                <tr className="bg-gradient-to-r from-slate-100 to-gray-100">
+            {/* =====================================================
+                MAIN
+            ===================================================== */}
+            <main className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8">
 
-                                    <th className="p-5 text-left text-gray-700 font-bold">
+                {/* =================================================
+                    PAGE NAVIGATION
+                ================================================= */}
+                <div className="mb-6 rounded-3xl border border-gray-100 bg-white p-2 shadow-sm">
 
-                                        Client Name
+                    <div className="flex flex-wrap gap-2">
 
-                                    </th>
+                        {navigation.map((item) => {
 
-                                    <th className="p-5 text-left text-gray-700 font-bold">
+                            const Icon = item.icon
 
-                                        Project Name
+                            const isActive = activeTab === item.key
 
-                                    </th>
-
-                                    <th className="p-5 text-left text-gray-700 font-bold">
-
-                                        Username
-
-                                    </th>
-
-                                    <th className="p-5 text-left text-gray-700 font-bold">
-
-                                        Password
-
-                                    </th>
-
-                                </tr>
-
-                            </thead>
-
-                            <tbody>
-
-                                {clients.map((client, index) => (
-
-                                    <tr
-
-                                        key={index}
-
-                                        className="border-b hover:bg-blue-50 transition-all duration-200"
-
-                                    >
-
-                                        <td className="p-5 font-semibold text-gray-800">
-
-                                            {client.clientName}
-
-                                        </td>
-
-                                        <td className="p-5 text-blue-600 font-semibold">
-
-                                            {client.projectName}
-
-                                        </td>
-
-                                        <td className="p-5 text-gray-700 font-semibold">
-
-                                            {client.username}
-
-                                        </td>
-
-                                        <td className="p-5">
-
-                                            <span className="bg-red-100 text-red-700 px-4 py-2 rounded-full font-bold">
-
-                                                {client.password}
-
-                                            </span>
-
-                                        </td>
-
-                                    </tr>
-
-                                ))}
-
-                            </tbody>
-
-                        </table>
+                            return (
+                                <button
+                                    key={item.key}
+                                    onClick={() => {
+                                        setActiveTab(item.key)
+                                        setMobileMenuOpen(false)
+                                    }}
+                                    className={`flex items-center gap-2 rounded-2xl px-5 py-3 text-sm font-bold transition ${
+                                        isActive
+                                            ? "bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-lg"
+                                            : "text-gray-600 hover:bg-green-50 hover:text-green-700"
+                                    }`}
+                                >
+                                    <Icon size={18} />
+                                    {item.label}
+                                </button>
+                            )
+                        })}
 
                     </div>
 
                 </div>
 
+
+                {/* =================================================
+                    CONTENT
+                ================================================= */}
+                {renderContent()}
+
             </main>
 
         </div>
-
     )
 }
 

@@ -1,38 +1,172 @@
 import Chart from "react-apexcharts"
 
-function PowerTrendChart({ trendData }) {
 
-    // POWER DATA
+function PowerTrendChart({ trendData = [] }) {
 
-    const powerData = trendData.map((item) =>
+    // ============================================================
+    // PREPARE DATA
+    //
+    // total_kw = instantaneous / logged power output
+    //
+    // Unit:
+    // kW
+    //
+    // IMPORTANT:
+    // We do NOT convert this to kWh.
+    // ============================================================
 
-        parseFloat(item.total_kw || 0)
+    const chartData = Array.isArray(trendData)
 
-    )
+        ? trendData
+            .map((item) => {
 
+                const hour =
+                    Number.parseInt(
+                        item.loghh,
+                        10
+                    )
+
+                const minute =
+                    Number.parseInt(
+                        item.logmi,
+                        10
+                    )
+
+                const power =
+                    Number.parseFloat(
+                        item.total_kw || 0
+                    )
+
+                return {
+
+                    hour:
+                        Number.isFinite(hour)
+                            ? hour
+                            : 0,
+
+                    minute:
+                        Number.isFinite(minute)
+                            ? minute
+                            : 0,
+
+                    time:
+                        `${String(
+                            Number.isFinite(hour)
+                                ? hour
+                                : 0
+                        ).padStart(2, "0")
+                        }:${String(
+                            Number.isFinite(minute)
+                                ? minute
+                                : 0
+                        ).padStart(2, "0")
+                        }`,
+
+                    power:
+                        Number.isFinite(power)
+                            ? power
+                            : 0
+
+                }
+
+            })
+
+            // ====================================================
+            // CHRONOLOGICAL ORDER
+            // ====================================================
+
+            .sort((a, b) => {
+
+                const timeA =
+                    (
+                        a.hour * 60
+                    ) +
+                    a.minute
+
+                const timeB =
+                    (
+                        b.hour * 60
+                    ) +
+                    b.minute
+
+                return timeA - timeB
+
+            })
+
+        : []
+
+
+    // ============================================================
     // TIME DATA
+    // ============================================================
 
-    const timeData = trendData.map(
+    const timeData =
+        chartData.map(
+            (item) => item.time
+        )
 
-        (item) =>
 
-            `${item.loghh}:${item.logmi}`
+    // ============================================================
+    // POWER DATA
+    // ============================================================
 
-    )
+    const powerData =
+        chartData.map(
+            (item) => item.power
+        )
 
+
+    // ============================================================
+    // MAX POWER
+    //
+    // Used to make the Y-axis readable.
+    // ============================================================
+
+    const maxPower =
+        powerData.length > 0
+
+            ? Math.max(
+                ...powerData
+            )
+
+            : 0
+
+
+    // ============================================================
+    // Y AXIS MAX
+    //
+    // Give the chart some breathing room above the highest point.
+    // ============================================================
+
+    const yAxisMax =
+        maxPower > 0
+
+            ? Math.ceil(
+                maxPower * 1.15
+            )
+
+            : 1
+
+
+    // ============================================================
     // CHART OPTIONS
+    // ============================================================
 
     const chartOptions = {
 
         chart: {
 
-            id: "power-trend",
+            id:
+                "power-trend",
 
-            type: "area",
+            type:
+                "area",
 
-            height: 380,
+            height:
+                380,
 
-            background: "#ffffff",
+            background:
+                "#ffffff",
 
             toolbar: {
 
@@ -40,19 +174,26 @@ function PowerTrendChart({ trendData }) {
 
                 tools: {
 
-                    download: true,
+                    download:
+                        true,
 
-                    selection: true,
+                    selection:
+                        true,
 
-                    zoom: true,
+                    zoom:
+                        true,
 
-                    zoomin: true,
+                    zoomin:
+                        true,
 
-                    zoomout: true,
+                    zoomout:
+                        true,
 
-                    pan: true,
+                    pan:
+                        true,
 
-                    reset: true
+                    reset:
+                        true
 
                 }
 
@@ -60,35 +201,45 @@ function PowerTrendChart({ trendData }) {
 
             zoom: {
 
-                enabled: true,
+                enabled:
+                    true,
 
-                type: "x",
+                type:
+                    "x",
 
-                autoScaleYaxis: true
+                autoScaleYaxis:
+                    true
 
             },
 
             animations: {
 
-                enabled: true,
+                enabled:
+                    true,
 
-                easing: "linear",
+                easing:
+                    "linear",
 
-                speed: 1000,
+                speed:
+                    1000,
 
                 animateGradually: {
 
-                    enabled: true,
+                    enabled:
+                        true,
 
-                    delay: 80
+                    delay:
+                        80
 
                 },
 
                 dynamicAnimation: {
 
-                    enabled: true,
+                    enabled:
+                        true,
 
-                    speed: 800
+                    speed:
+                        800
 
                 }
 
@@ -96,137 +247,209 @@ function PowerTrendChart({ trendData }) {
 
         },
 
+
         theme: {
 
-            mode: "light"
+            mode:
+                "light"
 
         },
 
-        colors: ["#16a34a"],
+
+        colors: [
+
+            "#16a34a"
+
+        ],
+
 
         fill: {
 
-            type: "gradient",
+            type:
+                "gradient",
 
             gradient: {
 
-                shade: "light",
+                shade:
+                    "light",
 
-                type: "vertical",
+                type:
+                    "vertical",
 
-                shadeIntensity: 0.5,
+                shadeIntensity:
+                    0.5,
 
-                opacityFrom: 0.55,
+                opacityFrom:
+                    0.55,
 
-                opacityTo: 0.05,
+                opacityTo:
+                    0.05,
 
-                stops: [0, 100]
+                stops: [
+                    0,
+                    100
+                ]
 
             }
 
         },
+
 
         stroke: {
 
-            curve: "smooth",
+            curve:
+                "smooth",
 
-            width: 5,
+            width:
+                4,
 
-            lineCap: "round",
+            lineCap:
+                "round",
 
-            colors: ["#16a34a"]
+            colors: [
+
+                "#16a34a"
+
+            ]
 
         },
+
 
         dataLabels: {
 
-            enabled: false
+            enabled:
+                false
 
         },
+
 
         grid: {
 
-            borderColor: "#e5e7eb",
+            borderColor:
+                "#e5e7eb",
 
-            strokeDashArray: 6,
+            strokeDashArray:
+                6,
 
             padding: {
 
-                left: 20,
+                left:
+                    20,
 
-                right: 20,
+                right:
+                    20,
 
-                top: 10,
+                top:
+                    10,
 
-                bottom: 10
+                bottom:
+                    10
 
             }
 
         },
+
 
         markers: {
 
-            size: 0,
+            size:
+                0,
 
-            strokeWidth: 0,
+            strokeWidth:
+                0,
 
             hover: {
 
-                size: 8
+                size:
+                    7
 
             }
 
         },
 
+
         tooltip: {
 
-            theme: "light",
+            theme:
+                "light",
 
-            shared: true,
+            shared:
+                true,
 
-            intersect: false,
+            intersect:
+                false,
 
             style: {
 
-                fontSize: "14px"
+                fontSize:
+                    "14px"
 
             },
 
             x: {
 
-                show: true
+                show:
+                    true
 
             },
 
             y: {
 
-                formatter: function (value) {
+                formatter:
+                    function (value) {
 
-                    return value.toFixed(2) + " kW"
+                        const numericValue =
+                            Number(
+                                value
+                            )
 
-                }
+                        return (
+
+                            numericValue
+                                .toFixed(2)
+
+                            +
+
+                            " kW"
+
+                        )
+
+                    }
 
             }
 
         },
 
+
         xaxis: {
 
-            categories: timeData,
+            categories:
+                timeData,
 
-            tickAmount: 10,
+            tickAmount:
+                Math.min(
+                    10,
+                    Math.max(
+                        timeData.length - 1,
+                        1
+                    )
+                ),
 
             labels: {
 
-                rotate: -45,
+                rotate:
+                    -45,
 
                 style: {
 
-                    colors: "#64748b",
+                    colors:
+                        "#64748b",
 
-                    fontSize: "12px",
+                    fontSize:
+                        "12px",
 
-                    fontWeight: 600
+                    fontWeight:
+                        600
 
                 }
 
@@ -234,53 +457,93 @@ function PowerTrendChart({ trendData }) {
 
             axisBorder: {
 
-                show: false
+                show:
+                    false
 
             },
 
             axisTicks: {
 
-                show: false
+                show:
+                    false
 
             },
 
             crosshairs: {
 
-                show: true,
+                show:
+                    true,
 
                 stroke: {
 
-                    color: "#16a34a",
+                    color:
+                        "#16a34a",
 
-                    width: 1,
+                    width:
+                        1,
 
-                    dashArray: 4
+                    dashArray:
+                        4
 
                 }
 
             }
 
         },
+
 
         yaxis: {
 
-            decimalsInFloat: 1,
+            min:
+                0,
+
+            max:
+                yAxisMax,
+
+            decimalsInFloat:
+                1,
 
             labels: {
 
-                formatter: function (value) {
+                formatter:
+                    function (value) {
 
-                    return value.toFixed(1)
+                        return Number(
+                            value
+                        ).toFixed(1)
 
-                },
+                    },
 
                 style: {
 
-                    colors: "#64748b",
+                    colors:
+                        "#64748b",
 
-                    fontSize: "12px",
+                    fontSize:
+                        "12px",
 
-                    fontWeight: 600
+                    fontWeight:
+                        600
+
+                }
+
+            },
+
+            title: {
+
+                text:
+                    "Power (kW)",
+
+                style: {
+
+                    color:
+                        "#64748b",
+
+                    fontSize:
+                        "12px",
+
+                    fontWeight:
+                        600
 
                 }
 
@@ -288,35 +551,115 @@ function PowerTrendChart({ trendData }) {
 
         },
 
+
         legend: {
 
-            show: false
+            show:
+                false
 
         }
 
     }
 
+
+    // ============================================================
     // SERIES
+    // ============================================================
 
     const chartSeries = [
 
         {
 
-            name: "Power Output",
+            name:
+                "Power Output",
 
-            data: powerData
+            data:
+                powerData
 
         }
 
     ]
 
+
+    // ============================================================
+    // EMPTY STATE
+    // ============================================================
+
+    if (
+        chartData.length === 0
+    ) {
+
+        return (
+
+            <div className="bg-white rounded-[32px] shadow-2xl border border-gray-100 p-8">
+
+                {/* HEADER */}
+
+                <div className="flex items-center justify-between mb-8">
+
+                    <div>
+
+                        <h2 className="text-3xl font-black text-gray-800 tracking-tight">
+
+                            Real-Time Power Trend
+
+                        </h2>
+
+                        <p className="text-gray-500 mt-2">
+
+                            Interactive live solar power analytics
+
+                        </p>
+
+                    </div>
+
+
+                    <div className="flex items-center gap-3 bg-gray-100 px-5 py-2 rounded-full">
+
+                        <div className="w-3 h-3 bg-gray-400 rounded-full"></div>
+
+                        <span className="text-gray-600 font-bold text-sm">
+
+                            NO DATA
+
+                        </span>
+
+                    </div>
+
+                </div>
+
+
+                <div className="h-[400px] flex items-center justify-center">
+
+                    <p className="text-gray-400 font-semibold">
+
+                        No power data available for the selected date.
+
+                    </p>
+
+                </div>
+
+            </div>
+
+        )
+    }
+
+
+    // ============================================================
+    // MAIN UI
+    // ============================================================
+
     return (
 
         <div className="bg-white rounded-[32px] shadow-2xl border border-gray-100 p-8 overflow-hidden transition-all duration-500">
 
-            {/* HEADER */}
+
+            {/* ====================================================
+                HEADER
+            ==================================================== */}
 
             <div className="flex items-center justify-between mb-8">
+
 
                 <div>
 
@@ -333,6 +676,7 @@ function PowerTrendChart({ trendData }) {
                     </p>
 
                 </div>
+
 
                 {/* LIVE BADGE */}
 
@@ -356,13 +700,20 @@ function PowerTrendChart({ trendData }) {
 
             </div>
 
-            {/* CHART */}
+
+            {/* ====================================================
+                CHART
+            ==================================================== */}
 
             <Chart
 
-                options={chartOptions}
+                options={
+                    chartOptions
+                }
 
-                series={chartSeries}
+                series={
+                    chartSeries
+                }
 
                 type="area"
 
@@ -374,5 +725,6 @@ function PowerTrendChart({ trendData }) {
 
     )
 }
+
 
 export default PowerTrendChart

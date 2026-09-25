@@ -1,439 +1,447 @@
 import { useEffect, useState } from "react"
 
+import { useNavigate } from "react-router-dom"
+
 import axios from "axios"
 
-import Sidebar from "../components/Sidebar"
+
+const API_URL = import.meta.env.VITE_API_URL || "/api"
 
 function DeviceSelection() {
 
-    // DEVICE LIST
+    const navigate = useNavigate()
 
-    const [devices, setDevices] =
-        useState([])
+    const [assignments, setAssignments] = useState([])
 
-    // FORM DATA
+    const [loading, setLoading] = useState(true)
 
-    const [formData, setFormData] =
-        useState({
+    const [error, setError] = useState("")
 
-            deviceName: "",
+    const user = (() => {
+        try {
+            return JSON.parse(
+                localStorage.getItem("user") || "null"
+            )
+        } catch {
+            return null
+        }
+    })()
 
-            topic: "",
+    const isAdmin =
+        user?.role === "admin" ||
+        Number(user?.usertype) === 900
 
-            clientName: "",
-
-            projectName: ""
-
-        })
-
-    // FETCH DEVICES
+    // ==========================================
+    // FETCH ASSIGNED DEVICES
+    // ==========================================
 
     useEffect(() => {
-
-        fetchDevices()
-
+        fetchAssignments()
     }, [])
 
-    const fetchDevices = async () => {
+    const fetchAssignments = async () => {
 
         try {
 
-            const res =
-                await axios.get(
+            setLoading(true)
+            setError("")
 
-                    "http://localhost:8000/api/devices"
+            const token =
+                localStorage.getItem("token")
 
-                )
+            if (!token) {
+                navigate("/login", { replace: true })
+                return
+            }
 
-            setDevices(res.data)
+            const endpoint = isAdmin
+                ? "/admin/assignments"
+                : "/client/assignments"
 
-        } catch (error) {
-
-            console.log(error)
-
-        }
-
-    }
-
-    // INPUT CHANGE
-
-    const handleChange = (e) => {
-
-        setFormData({
-
-            ...formData,
-
-            [e.target.name]:
-                e.target.value
-
-        })
-
-    }
-
-    // ADD DEVICE
-
-    const handleAddDevice = async () => {
-
-        try {
-
-            await axios.post(
-
-                "http://localhost:8000/api/devices",
-
-                formData
-
+            const response = await axios.get(
+                `${API_URL}${endpoint}`,
+                {
+                    headers: {
+                        Authorization:
+                            `Bearer ${token}`
+                    }
+                }
             )
 
-            fetchDevices()
+            if (!response.data?.success) {
+                throw new Error(
+                    response.data?.message ||
+                    "Unable to load devices"
+                )
+            }
 
-            setFormData({
+            const data = Array.isArray(
+                response.data?.data
+            )
+                ? response.data.data
+                : []
 
-                deviceName: "",
+            const activeAssignments = data.filter(
+                item => Number(item.active) === 1
+            )
 
-                topic: "",
+            setAssignments(activeAssignments)
 
-                clientName: "",
+        } catch (err) {
 
-                projectName: ""
+            console.error(
+                "Device Selection Error:",
+                err
+            )
 
-            })
+            const status =
+                err?.response?.status
 
-            alert("Device Added Successfully")
+            if (status === 401 || status === 403) {
 
-        } catch (error) {
+                localStorage.removeItem("token")
+                localStorage.removeItem("user")
+                localStorage.removeItem("selectedAssignment")
 
-            console.log(error)
+                navigate("/login", {
+                    replace: true
+                })
 
+                return
+            }
+
+            setError(
+                err?.response?.data?.message ||
+                err?.message ||
+                "Unable to load devices"
+            )
+
+        } finally {
+            setLoading(false)
         }
 
     }
+
+    // ==========================================
+    // OPEN DASHBOARD
+    // ==========================================
+
+    const handleSelectDevice = (assignment) => {
+
+        localStorage.setItem(
+            "selectedAssignment",
+            JSON.stringify(assignment)
+        )
+
+        navigate("/dashboard")
+    }
+
+    // ==========================================
+    // BACK TO ADMIN
+    // ==========================================
+
+    const handleBackToAdmin = () => {
+
+        localStorage.removeItem("selectedAssignment")
+
+        navigate("/admin", {
+            replace: true
+        })
+    }
+
+    // ==========================================
+    // LOGOUT
+    // ==========================================
+
+    const handleLogout = () => {
+
+        localStorage.removeItem("token")
+        localStorage.removeItem("user")
+        localStorage.removeItem("selectedAssignment")
+
+        navigate("/login", {
+            replace: true
+        })
+    }
+
+    const getPlantName = assignment =>
+        assignment.plantname ||
+        assignment.plant_id ||
+        "Energy Device"
+
+    const getLocation = assignment =>
+        assignment.location ||
+        assignment.plantaddress ||
+        "Location not available"
+
+    const getMeterName = assignment =>
+        assignment.meter_name ||
+        assignment.meter_id ||
+        "Energy Meter"
+
+    // ==========================================
+    // LOADING
+    // ==========================================
+
+    if (loading) {
+
+        return (
+            <div className="min-h-screen bg-gradient-to-br from-slate-100 to-gray-200 flex items-center justify-center p-8">
+
+                <div className="w-full max-w-3xl bg-white rounded-3xl shadow-xl p-10 text-center">
+
+                    <h1 className="text-4xl font-black text-gray-800">
+                        Device Selection
+                    </h1>
+
+                    <p className="text-gray-500 mt-2">
+                        Loading your monitoring devices...
+                    </p>
+
+                    <div className="mt-10">
+                        <div className="text-xl font-semibold text-gray-600">
+                            Loading...
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+        )
+    }
+
+    // ==========================================
+    // PAGE
+    // ==========================================
 
     return (
 
-        <div className="min-h-screen bg-gradient-to-br from-slate-100 to-gray-200 flex">
+        <div className="min-h-screen bg-gradient-to-br from-slate-100 to-gray-200">
 
-            {/* SIDEBAR */}
+            <main className="min-h-screen p-8 overflow-y-auto">
 
-            <Sidebar />
+                <div className="max-w-7xl mx-auto">
 
-            {/* MAIN */}
+                    {/* HEADER */}
 
-            <main className="flex-1 p-8 overflow-y-auto">
-
-                {/* HEADER */}
-
-                <div className="mb-10">
-
-                    <h1 className="text-5xl font-black text-gray-800 tracking-tight">
-
-                        Device Selection Dashboard
-
-                    </h1>
-
-                    <p className="text-gray-500 mt-3 text-lg">
-
-                        MongoDB Connected Smart Device Management System
-
-                    </p>
-
-                </div>
-
-                {/* ADD DEVICE FORM */}
-
-                <div className="bg-white rounded-3xl shadow-2xl p-8 border border-gray-100 mb-10">
-
-                    <div className="flex items-center justify-between mb-8">
+                    <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-5 mb-10">
 
                         <div>
 
-                            <h2 className="text-3xl font-black text-gray-800">
+                            <h1 className="text-5xl font-black text-gray-800 tracking-tight">
+                                Device Selection
+                            </h1>
 
-                                Add New Device
-
-                            </h2>
-
-                            <p className="text-gray-500 mt-2">
-
-                                Register MQTT-enabled field devices
-
+                            <p className="text-gray-500 mt-3 text-lg">
+                                {isAdmin
+                                    ? "Select a monitoring device to open the dashboard"
+                                    : "Select your assigned plant and energy meter"}
                             </p>
 
                         </div>
 
-                        <div className="bg-blue-100 text-blue-700 px-5 py-2 rounded-full font-bold">
+                        <div className="flex flex-wrap gap-3">
 
-                            DEVICE CONFIG
+                            {isAdmin && (
+                                <button
+                                    onClick={handleBackToAdmin}
+                                    className="px-5 py-3 rounded-xl bg-white border border-green-200 text-green-700 font-semibold shadow-sm hover:bg-green-50"
+                                >
+                                    ← Back to Admin
+                                </button>
+                            )}
 
-                        </div>
-
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-                        {/* DEVICE NAME */}
-
-                        <div>
-
-                            <label className="block text-gray-700 font-semibold mb-3">
-
-                                Device Name
-
-                            </label>
-
-                            <input
-
-                                type="text"
-
-                                name="deviceName"
-
-                                placeholder="Enter Device Name"
-
-                                value={formData.deviceName}
-
-                                onChange={handleChange}
-
-                                className="w-full border border-gray-200 rounded-2xl px-5 py-4 text-lg outline-none shadow-sm focus:ring-2 focus:ring-blue-400"
-
-                            />
-
-                        </div>
-
-                        {/* MQTT TOPIC */}
-
-                        <div>
-
-                            <label className="block text-gray-700 font-semibold mb-3">
-
-                                MQTT Topic
-
-                            </label>
-
-                            <input
-
-                                type="text"
-
-                                name="topic"
-
-                                placeholder="Enter MQTT Topic"
-
-                                value={formData.topic}
-
-                                onChange={handleChange}
-
-                                className="w-full border border-gray-200 rounded-2xl px-5 py-4 text-lg outline-none shadow-sm focus:ring-2 focus:ring-blue-400"
-
-                            />
-
-                        </div>
-
-                        {/* CLIENT */}
-
-                        <div>
-
-                            <label className="block text-gray-700 font-semibold mb-3">
-
-                                Client Name
-
-                            </label>
-
-                            <input
-
-                                type="text"
-
-                                name="clientName"
-
-                                placeholder="Enter Client Name"
-
-                                value={formData.clientName}
-
-                                onChange={handleChange}
-
-                                className="w-full border border-gray-200 rounded-2xl px-5 py-4 text-lg outline-none shadow-sm focus:ring-2 focus:ring-green-400"
-
-                            />
-
-                        </div>
-
-                        {/* PROJECT */}
-
-                        <div>
-
-                            <label className="block text-gray-700 font-semibold mb-3">
-
-                                Project Name
-
-                            </label>
-
-                            <input
-
-                                type="text"
-
-                                name="projectName"
-
-                                placeholder="Enter Project Name"
-
-                                value={formData.projectName}
-
-                                onChange={handleChange}
-
-                                className="w-full border border-gray-200 rounded-2xl px-5 py-4 text-lg outline-none shadow-sm focus:ring-2 focus:ring-purple-400"
-
-                            />
+                            <button
+                                onClick={handleLogout}
+                                className="px-5 py-3 rounded-xl bg-white border border-gray-200 text-gray-700 font-semibold shadow-sm hover:bg-gray-50"
+                            >
+                                Logout
+                            </button>
 
                         </div>
 
                     </div>
 
-                    {/* BUTTON */}
+                    {/* ERROR */}
 
-                    <button
+                    {error && (
+                        <div className="mb-8 bg-red-50 border border-red-200 text-red-700 rounded-2xl p-5">
+                            <div className="font-bold">
+                                Unable to load devices
+                            </div>
+                            <div className="text-sm mt-1">
+                                {error}
+                            </div>
+                        </div>
+                    )}
 
-                        onClick={handleAddDevice}
+                    {/* EMPTY */}
 
-                        className="mt-8 bg-gradient-to-r from-blue-600 to-cyan-500 text-white px-8 py-4 rounded-2xl text-lg font-bold shadow-xl hover:scale-[1.03] hover:shadow-2xl transition-all duration-300"
+                    {!error && assignments.length === 0 && (
+                        <div className="bg-white rounded-3xl shadow-xl p-12 text-center">
 
-                    >
+                            <div className="text-5xl mb-5">
+                                📡
+                            </div>
 
-                        + Add Device
-
-                    </button>
-
-                </div>
-
-                {/* DEVICE TABLE */}
-
-                <div className="bg-white rounded-3xl shadow-2xl p-8 border border-gray-100">
-
-                    <div className="flex items-center justify-between mb-8">
-
-                        <div>
-
-                            <h2 className="text-3xl font-black text-gray-800">
-
-                                Device Database
-
+                            <h2 className="text-2xl font-black text-gray-800">
+                                No Device Assigned
                             </h2>
 
-                            <p className="text-gray-500 mt-2">
-
-                                Connected industrial monitoring devices
-
+                            <p className="text-gray-500 mt-3">
+                                {isAdmin
+                                    ? "No active device assignments are available yet. Create an assignment from the Admin Panel."
+                                    : "Please contact the administrator to assign a monitoring device to your account."}
                             </p>
 
                         </div>
+                    )}
 
-                        <div className="bg-green-100 text-green-700 px-5 py-2 rounded-full font-bold">
+                    {/* DEVICE CARDS */}
 
-                            LIVE DATABASE
+                    {assignments.length > 0 && (
 
-                        </div>
+                        <div>
 
-                    </div>
+                            <div className="flex items-center justify-between mb-6">
 
-                    <div className="overflow-x-auto rounded-2xl border border-gray-100">
+                                <div>
 
-                        <table className="w-full border-collapse">
+                                    <h2 className="text-2xl font-black text-gray-800">
+                                        Monitoring Devices
+                                    </h2>
 
-                            <thead>
+                                    <p className="text-gray-500 mt-1">
+                                        {assignments.length} available device
+                                        {assignments.length !== 1 ? "s" : ""}
+                                    </p>
 
-                                <tr className="bg-gradient-to-r from-slate-100 to-gray-100">
+                                </div>
 
-                                    <th className="p-5 text-left text-gray-700 font-bold">
+                                <div className="bg-green-100 text-green-700 px-5 py-2 rounded-full font-bold">
+                                    ACTIVE
+                                </div>
 
-                                        Device Name
+                            </div>
 
-                                    </th>
+                            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
 
-                                    <th className="p-5 text-left text-gray-700 font-bold">
+                                {assignments.map(assignment => (
 
-                                        MQTT Topic
-
-                                    </th>
-
-                                    <th className="p-5 text-left text-gray-700 font-bold">
-
-                                        Client
-
-                                    </th>
-
-                                    <th className="p-5 text-left text-gray-700 font-bold">
-
-                                        Project
-
-                                    </th>
-
-                                    <th className="p-5 text-left text-gray-700 font-bold">
-
-                                        Status
-
-                                    </th>
-
-                                </tr>
-
-                            </thead>
-
-                            <tbody>
-
-                                {devices.map((device, index) => (
-
-                                    <tr
-
-                                        key={index}
-
-                                        className="border-b hover:bg-blue-50 transition-all duration-200"
-
+                                    <div
+                                        key={assignment.assignment_id}
+                                        className="bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden hover:shadow-2xl hover:-translate-y-1 transition-all duration-300"
                                     >
 
-                                        <td className="p-5 font-semibold text-gray-800">
+                                        <div className="bg-gradient-to-r from-slate-800 to-slate-700 p-6 text-white">
 
-                                            {device.deviceName}
+                                            <div className="flex items-center justify-between">
 
-                                        </td>
+                                                <div>
+                                                    <div className="text-sm text-gray-300">
+                                                        PLANT
+                                                    </div>
 
-                                        <td className="p-5 text-blue-600 font-semibold">
+                                                    <h3 className="text-2xl font-black mt-1">
+                                                        {getPlantName(assignment)}
+                                                    </h3>
+                                                </div>
 
-                                            {device.topic}
+                                                <div className="text-3xl">
+                                                    ⚡
+                                                </div>
 
-                                        </td>
+                                            </div>
 
-                                        <td className="p-5 text-gray-700 font-semibold">
+                                        </div>
 
-                                            {device.clientName}
+                                        <div className="p-6">
 
-                                        </td>
+                                            <div className="grid grid-cols-2 gap-4 mb-5">
 
-                                        <td className="p-5 text-gray-700 font-semibold">
+                                                <div>
+                                                    <div className="text-xs font-bold text-gray-400 uppercase">
+                                                        Plant ID
+                                                    </div>
+                                                    <div className="font-bold text-gray-800 mt-1">
+                                                        {assignment.plant_id || "-"}
+                                                    </div>
+                                                </div>
 
-                                            {device.projectName}
+                                                <div>
+                                                    <div className="text-xs font-bold text-gray-400 uppercase">
+                                                        Device ID
+                                                    </div>
+                                                    <div className="font-bold text-gray-800 mt-1">
+                                                        {assignment.device_id || "-"}
+                                                    </div>
+                                                </div>
 
-                                        </td>
+                                            </div>
 
-                                        <td className="p-5">
+                                            <div className="mb-5">
+                                                <div className="text-xs font-bold text-gray-400 uppercase">
+                                                    Location
+                                                </div>
+                                                <div className="font-semibold text-gray-700 mt-1">
+                                                    {getLocation(assignment)}
+                                                </div>
+                                            </div>
 
-                                            <span className="bg-green-100 text-green-700 px-4 py-2 rounded-full font-bold">
+                                            <div className="grid grid-cols-2 gap-4 mb-5">
 
-                                                {device.status}
+                                                <div>
+                                                    <div className="text-xs font-bold text-gray-400 uppercase">
+                                                        Meter
+                                                    </div>
+                                                    <div className="font-semibold text-gray-700 mt-1">
+                                                        {getMeterName(assignment)}
+                                                    </div>
+                                                </div>
 
-                                            </span>
+                                                <div>
+                                                    <div className="text-xs font-bold text-gray-400 uppercase">
+                                                        Gateway
+                                                    </div>
+                                                    <div className="font-semibold text-gray-700 mt-1">
+                                                        {assignment.gateway_id || "-"}
+                                                    </div>
+                                                </div>
 
-                                        </td>
+                                            </div>
 
-                                    </tr>
+                                            <div className="flex items-center justify-between mb-5">
+                                                <span className="text-gray-500 font-semibold">
+                                                    Status
+                                                </span>
+                                                <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm font-bold">
+                                                    ACTIVE
+                                                </span>
+                                            </div>
+
+                                            <button
+                                                onClick={() => handleSelectDevice(assignment)}
+                                                className="w-full bg-gradient-to-r from-blue-600 to-cyan-500 text-white py-4 rounded-2xl font-bold text-lg shadow-lg hover:shadow-xl hover:scale-[1.02] transition-all duration-200"
+                                            >
+                                                Open Dashboard →
+                                            </button>
+
+                                        </div>
+
+                                    </div>
 
                                 ))}
 
-                            </tbody>
+                            </div>
 
-                        </table>
-
-                    </div>
+                        </div>
+                    )}
 
                 </div>
 
             </main>
 
         </div>
-
     )
 }
 

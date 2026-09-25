@@ -1,59 +1,73 @@
 import {
-
     PieChart,
     Pie,
     Cell,
     ResponsiveContainer
-
 } from "recharts"
 
 function PRDonutChart({ pr }) {
 
-    // LIMIT PR VALUE
+    // ============================================================
+    // PR VALUE
+    // ============================================================
 
-    const prValue = Math.min(
+    const rawPR =
+        Number.parseFloat(pr)
 
-        Math.max(
+    const safePR =
+        Number.isFinite(rawPR) &&
+            rawPR >= 0
+            ? rawPR
+            : 0
 
-            Math.round(parseFloat(pr || 0)),
+    // Keep PR within 0–100%
+    const prValue =
+        Math.min(
+            Math.max(
+                safePR,
+                0
+            ),
+            100
+        )
 
-            0
+    // Display with 2 decimal places
+    const displayPR =
+        prValue.toFixed(2)
 
-        ),
 
-        100
-
-    )
-
+    // ============================================================
     // REMAINING
+    // ============================================================
 
     const remaining =
+        Math.max(
+            100 - prValue,
+            0
+        )
 
-        100 - prValue
 
-    // DATA
+    // ============================================================
+    // DONUT DATA
+    // ============================================================
 
     const data = [
 
         {
-
             name: "PR",
-
             value: prValue
-
         },
 
         {
-
             name: "Remaining",
-
             value: remaining
-
         }
 
     ]
 
+
+    // ============================================================
     // COLORS
+    // ============================================================
 
     const COLORS = [
 
@@ -62,6 +76,11 @@ function PRDonutChart({ pr }) {
         "#ecfdf5"
 
     ]
+
+
+    // ============================================================
+    // UI
+    // ============================================================
 
     return (
 
@@ -85,6 +104,7 @@ function PRDonutChart({ pr }) {
 
             </div>
 
+
             {/* DONUT TILE */}
 
             <div className="bg-gradient-to-br from-green-50 to-white rounded-[24px] border border-green-100 shadow-inner p-4 flex items-center justify-center relative overflow-hidden">
@@ -93,16 +113,14 @@ function PRDonutChart({ pr }) {
 
                 <div className="absolute w-52 h-52 bg-green-200 rounded-full blur-3xl opacity-20 animate-pulse"></div>
 
+
                 {/* CHART */}
 
                 <div className="relative w-full h-[240px] flex items-center justify-center">
 
                     <ResponsiveContainer
-
                         width="100%"
-
                         height="100%"
-
                     >
 
                         <PieChart>
@@ -137,17 +155,21 @@ function PRDonutChart({ pr }) {
 
                             >
 
-                                {data.map((entry, index) => (
+                                {data.map(
+                                    (entry, index) => (
 
-                                    <Cell
+                                        <Cell
 
-                                        key={index}
+                                            key={index}
 
-                                        fill={COLORS[index]}
+                                            fill={
+                                                COLORS[index]
+                                            }
 
-                                    />
+                                        />
 
-                                ))}
+                                    )
+                                )}
 
                             </Pie>
 
@@ -155,23 +177,27 @@ function PRDonutChart({ pr }) {
 
                     </ResponsiveContainer>
 
+
                     {/* CENTER TILE */}
 
                     <div className="absolute inset-0 flex items-center justify-center">
 
                         <div className="bg-white rounded-full shadow-xl w-36 h-36 flex flex-col items-center justify-center border border-green-100">
 
-                            <p className="text-5xl font-black text-green-600 tracking-tight leading-none">
+                            {/* SLIGHTLY SMALLER PR TEXT */}
 
-                                {prValue}
+                            <p className="text-4xl font-black text-green-600 tracking-tight leading-none">
 
-                                <span className="text-2xl">
+                                {displayPR}
+
+                                <span className="text-xl">
 
                                     %
 
                                 </span>
 
                             </p>
+
 
                             <p className="text-gray-500 mt-1 text-xs font-semibold">
 
@@ -186,6 +212,7 @@ function PRDonutChart({ pr }) {
                 </div>
 
             </div>
+
 
             {/* STATUS TILE */}
 

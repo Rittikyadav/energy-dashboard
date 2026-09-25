@@ -1,169 +1,726 @@
 import { useEffect, useState } from "react"
-
 import axios from "axios"
 
 import Sidebar from "../components/Sidebar"
-
 import CUFChart from "../charts/CUFChart"
+
 
 function CUFAnalysis() {
 
-    // API DATA
+    // ============================================================
+    // STATE
+    // ============================================================
 
     const [trendData, setTrendData] =
         useState([])
 
-    // PLANT CAPACITY
-
     const [plantCapacity, setPlantCapacity] =
-        useState(0)
-
-    // DAILY CUF
-
-    const [todayCUF, setTodayCUF] =
-        useState(0)
-
-    // OVERALL CUF
-
-    const [overallCUF, setOverallCUF] =
-        useState(0)
-
-    // TODAY GENERATION
+        useState(30)
 
     const [todayGeneration, setTodayGeneration] =
-        useState(0)
+        useState("0.00")
 
-    // TOTAL GENERATION
+    const [todayCUF, setTodayCUF] =
+        useState("0.00")
 
     const [totalGeneration, setTotalGeneration] =
-        useState(0)
+        useState("0.00")
 
-    // TOTAL DAYS
+    const [overallCUF, setOverallCUF] =
+        useState("0.00")
 
     const [totalDays, setTotalDays] =
         useState(0)
 
+
+    // ============================================================
+    // LOCAL DATE
+    // ============================================================
+
+    const formatLocalDate = (date) => {
+
+        if (!date) {
+            return ""
+        }
+
+        const year =
+            date.getFullYear()
+
+        const month =
+            String(
+                date.getMonth() + 1
+            ).padStart(
+                2,
+                "0"
+            )
+
+        const day =
+            String(
+                date.getDate()
+            ).padStart(
+                2,
+                "0"
+            )
+
+        return `${year}-${month}-${day}`
+    }
+
+
+    // ============================================================
+    // PROCESS METER DATA
+    //
+    // THIS IS THE SAME LOGIC USED BY
+    // ENERGY GENERATION PAGE.
+    //
+    // IMPORTANT:
+    //
+    // kWh is cumulative.
+    //
+    // If:
+    //
+    // 18431.92
+    // 18304.10   <-- RESET
+    // 18304.28
+    // 18304.47
+    //
+    // everything before 18304.10 belongs to
+    // the previous meter session.
+    //
+    // We therefore calculate today's generation
+    // only after the LATEST reset.
+    // ============================================================
+
+    const processMeterData = (data) => {
+
+        if (!Array.isArray(data)) {
+            return []
+        }
+
+
+        // --------------------------------------------------------
+        // SORT OLD -> NEW
+        // --------------------------------------------------------
+
+        const sorted =
+            [...data].sort(
+                (a, b) => {
+
+                    const timeA =
+                        new Date(
+                            a?.ts || 0
+                        ).getTime()
+
+                    const timeB =
+                        new Date(
+                            b?.ts || 0
+                        ).getTime()
+
+                    return (
+                        timeA -
+                        timeB
+                    )
+                }
+            )
+
+
+        // --------------------------------------------------------
+        // FIND LATEST RESET
+        //
+        // RESET:
+        //
+        // current kWh < previous kWh
+        // --------------------------------------------------------
+
+        let latestResetIndex =
+            -1
+
+        let previousKwh =
+            null
+
+
+        for (
+            let i = 0;
+            i < sorted.length;
+            i++
+        ) {
+
+            const currentKwh =
+                Number.parseFloat(
+                    sorted[i]?.kwh
+                )
+
+
+            if (
+                !Number.isFinite(
+                    currentKwh
+                )
+            ) {
+                continue
+            }
+
+
+            if (
+                previousKwh !== null &&
+                currentKwh < previousKwh
+            ) {
+
+                latestResetIndex =
+                    i
+            }
+
+
+            previousKwh =
+                currentKwh
+        }
+
+
+        // --------------------------------------------------------
+        // KEEP ONLY DATA FROM LATEST RESET
+        // --------------------------------------------------------
+
+        const calculationData =
+            latestResetIndex >= 0
+                ? sorted.slice(
+                    latestResetIndex
+                )
+                : sorted
+
+
+        // --------------------------------------------------------
+        // CALCULATE INTERVAL GENERATION
+        // --------------------------------------------------------
+
+        let lastKwh =
+            null
+
+
+        const processed =
+            calculationData.map(
+                (
+                    item,
+                    index
+                ) => {
+
+                    const currentKwh =
+                        Number.parseFloat(
+                            item?.kwh
+                        )
+
+
+                    // --------------------------------------------
+                    // INVALID READING
+                    // --------------------------------------------
+
+                    if (
+                        !Number.isFinite(
+                            currentKwh
+                        )
+                    ) {
+
+                        return {
+
+                            ...item,
+
+                            _kwh: null,
+
+                            _generated: 0,
+
+                            _reset: false,
+
+                            _calculationIndex:
+                                index
+                        }
+                    }
+
+
+                    // --------------------------------------------
+                    // FIRST VALUE AFTER RESET
+                    //
+                    // This is the baseline.
+                    // It does NOT count as generation.
+                    // --------------------------------------------
+
+                    if (
+                        lastKwh === null
+                    ) {
+
+                        lastKwh =
+                            currentKwh
+
+
+                        return {
+
+                            ...item,
+
+                            _kwh:
+                                currentKwh,
+
+                            _generated:
+                                0,
+
+                            _reset:
+                                true,
+
+                            _calculationIndex:
+                                index
+                        }
+                    }
+
+
+                    // --------------------------------------------
+                    // DIFFERENCE
+                    // --------------------------------------------
+
+                    const difference =
+                        currentKwh -
+                        lastKwh
+
+
+                    // --------------------------------------------
+                    // NORMAL INCREASE
+                    //
+                    // Keep the same 20 kWh safety limit
+                    // used by EnergyGeneration.jsx.
+                    // --------------------------------------------
+
+                    if (
+                        difference >= 0 &&
+                        difference <= 20
+                    ) {
+
+                        lastKwh =
+                            currentKwh
+
+
+                        return {
+
+                            ...item,
+
+                            _kwh:
+                                currentKwh,
+
+                            _generated:
+                                difference,
+
+                            _reset:
+                                false,
+
+                            _calculationIndex:
+                                index
+                        }
+                    }
+
+
+                    // --------------------------------------------
+                    // ANOTHER RESET / BAD READING
+                    // --------------------------------------------
+
+                    lastKwh =
+                        currentKwh
+
+
+                    return {
+
+                        ...item,
+
+                        _kwh:
+                            currentKwh,
+
+                        _generated:
+                            0,
+
+                        _reset:
+                            true,
+
+                        _calculationIndex:
+                            index
+                    }
+                }
+            )
+
+
+        return processed
+    }
+
+
+    // ============================================================
+    // FETCH DATA
+    // ============================================================
+
     useEffect(() => {
+
+        const date =
+            formatLocalDate(
+                new Date()
+            )
+
+
+        // Reset UI while loading
+
+        setTrendData([])
+
+        setTodayGeneration(
+            "0.00"
+        )
+
+        setTotalGeneration(
+            "0.00"
+        )
+
+        setTodayCUF(
+            "0.00"
+        )
+
 
         axios
             .get(
-                "https://rail.sustiknow.com/getOrders.php?date=2026-05-22"
+                `https://rail.sustiknow.com/getOrders.php?date=${date}`
+            )
+            .then(
+                (res) => {
+
+                    // ====================================================
+                    // API DATA
+                    // ====================================================
+
+                    const apiData =
+                        Array.isArray(
+                            res.data?.data
+                        )
+                            ? res.data.data
+                            : []
+
+
+                    if (
+                        apiData.length === 0
+                    ) {
+
+                        return
+                    }
+
+
+                    // ====================================================
+                    // PLANT CAPACITY
+                    // ====================================================
+
+                    const apiCapacity =
+                        Number.parseFloat(
+                            res.data
+                                ?.plantkwp
+                                ?.[0]
+                                ?.capacity
+                        )
+
+
+                    const capacity =
+                        Number.isFinite(
+                            apiCapacity
+                        ) &&
+                            apiCapacity > 0
+                            ? apiCapacity
+                            : 30
+
+
+                    setPlantCapacity(
+                        capacity
+                    )
+
+
+                    // ====================================================
+                    // PROCESS METER DATA
+                    // ====================================================
+
+                    const processed =
+                        processMeterData(
+                            apiData
+                        )
+
+
+                    setTrendData(
+                        processed
+                    )
+
+
+                    // ====================================================
+                    // LATEST CUMULATIVE ENERGY
+                    // ====================================================
+
+                    const latest =
+                        processed[
+                        processed.length - 1
+                        ]
+
+
+                    const latestKwh =
+                        Number.parseFloat(
+                            latest?._kwh
+                        )
+
+
+                    if (
+                        Number.isFinite(
+                            latestKwh
+                        )
+                    ) {
+
+                        setTotalGeneration(
+                            latestKwh.toFixed(
+                                2
+                            )
+                        )
+                    }
+
+
+                    // ====================================================
+                    // TODAY'S GENERATION
+                    //
+                    // EXACT SAME CALCULATION AS
+                    // ENERGY GENERATION PAGE.
+                    // ====================================================
+
+                    const dailyGeneration =
+                        processed.reduce(
+                            (
+                                total,
+                                item
+                            ) => {
+
+                                const generation =
+                                    Number(
+                                        item?._generated ||
+                                        0
+                                    )
+
+
+                                if (
+                                    Number.isFinite(
+                                        generation
+                                    ) &&
+                                    generation > 0
+                                ) {
+
+                                    return (
+                                        total +
+                                        generation
+                                    )
+                                }
+
+
+                                return total
+                            },
+                            0
+                        )
+
+
+                    const roundedGeneration =
+                        Number(
+                            dailyGeneration.toFixed(
+                                2
+                            )
+                        )
+
+
+                    setTodayGeneration(
+                        roundedGeneration.toFixed(
+                            2
+                        )
+                    )
+
+
+                    // ====================================================
+                    // DAILY CUF
+                    //
+                    // CUF =
+                    //
+                    // Daily Generation
+                    // ------------------------------- × 100
+                    // Plant Capacity × 24 hours
+                    //
+                    // Example:
+                    //
+                    // 8.35
+                    // -------- × 100
+                    // 30 × 24
+                    //
+                    // = 1.16%
+                    // ====================================================
+
+                    let dailyCUF =
+                        0
+
+
+                    if (
+                        capacity > 0
+                    ) {
+
+                        dailyCUF =
+                            (
+                                roundedGeneration /
+                                (
+                                    capacity *
+                                    24
+                                )
+                            ) *
+                            100
+                    }
+
+
+                    if (
+                        !Number.isFinite(
+                            dailyCUF
+                        )
+                    ) {
+
+                        dailyCUF =
+                            0
+                    }
+
+
+                    setTodayCUF(
+                        dailyCUF.toFixed(
+                            2
+                        )
+                    )
+
+
+                    // ====================================================
+                    // RUNNING DAYS
+                    //
+                    // Keep existing project timeline.
+                    // ====================================================
+
+                    const startDate =
+                        new Date(
+                            "2026-02-22T00:00:00"
+                        )
+
+
+                    const currentDate =
+                        new Date()
+
+
+                    const difference =
+                        currentDate -
+                        startDate
+
+
+                    const days =
+                        Math.max(
+                            1,
+                            Math.ceil(
+                                difference /
+                                (
+                                    1000 *
+                                    60 *
+                                    60 *
+                                    24
+                                )
+                            )
+                        )
+
+
+                    setTotalDays(
+                        days
+                    )
+
+
+                    // ====================================================
+                    // OVERALL CUF
+                    //
+                    // Existing dashboard methodology:
+                    //
+                    // Total cumulative energy
+                    // -------------------------------- × 100
+                    // Plant Capacity × Running Days × 24
+                    // ====================================================
+
+                    let lifetimeCUF =
+                        0
+
+
+                    if (
+                        Number.isFinite(
+                            latestKwh
+                        ) &&
+                        capacity > 0 &&
+                        days > 0
+                    ) {
+
+                        lifetimeCUF =
+                            (
+                                latestKwh /
+                                (
+                                    capacity *
+                                    days *
+                                    24
+                                )
+                            ) *
+                            100
+                    }
+
+
+                    if (
+                        !Number.isFinite(
+                            lifetimeCUF
+                        )
+                    ) {
+
+                        lifetimeCUF =
+                            0
+                    }
+
+
+                    setOverallCUF(
+                        lifetimeCUF.toFixed(
+                            2
+                        )
+                    )
+                }
+            )
+            .catch(
+                (error) => {
+
+                    console.error(
+                        "CUF API error:",
+                        error
+                    )
+
+                    setTrendData([])
+
+                    setTodayGeneration(
+                        "0.00"
+                    )
+
+                    setTotalGeneration(
+                        "0.00"
+                    )
+
+                    setTodayCUF(
+                        "0.00"
+                    )
+                }
             )
 
-            .then((res) => {
-
-                const apiData =
-                    res.data.data
-
-                setTrendData(apiData)
-
-                // PLANT CAPACITY
-
-                const capacity =
-                    parseFloat(
-                        res.data.plantkwp[0].capacity
-                    )
-
-                setPlantCapacity(capacity)
-
-                // TODAY GENERATION
-
-                let todayGen = 0
-
-                apiData.forEach((item) => {
-
-                    todayGen += parseFloat(
-                        item.kwhgen || 0
-                    )
-
-                })
-
-                setTodayGeneration(
-                    todayGen.toFixed(2)
-                )
-
-                // DAILY CUF
-
-                const dailyCUFValue =
-
-                    (
-                        todayGen /
-                        (capacity * 24)
-                    ) * 100
-
-                setTodayCUF(
-                    dailyCUFValue.toFixed(2)
-                )
-
-                // TOTAL GENERATION
-
-                const lastEntry =
-                    apiData[apiData.length - 1]
-
-                const totalGen =
-                    parseFloat(
-                        lastEntry.kwh || 0
-                    )
-
-                setTotalGeneration(
-                    totalGen.toFixed(2)
-                )
-
-                // DAYS SINCE 22 FEB
-
-                const startDate =
-                    new Date("2026-02-22")
-
-                const today =
-                    new Date()
-
-                const diffTime =
-                    today - startDate
-
-                const days =
-                    Math.ceil(
-                        diffTime /
-                        (1000 * 60 * 60 * 24)
-                    )
-
-                setTotalDays(days)
-
-                // OVERALL CUF
-
-                const overallCUFValue =
-
-                    (
-                        totalGen /
-                        (capacity * days * 24)
-                    ) * 100
-
-                setOverallCUF(
-                    overallCUFValue.toFixed(2)
-                )
-
-            })
-
-            .catch((err) => {
-
-                console.log(err)
-
-            })
-
     }, [])
+
+
+    // ============================================================
+    // UI
+    // ============================================================
 
     return (
 
         <div className="min-h-screen bg-gradient-to-br from-slate-100 to-gray-200 flex">
 
-            {/* SIDEBAR */}
-
             <Sidebar />
 
-            {/* MAIN */}
 
             <main className="flex-1 p-8 overflow-y-auto">
 
-                {/* HEADER */}
+
+                {/* =================================================
+                    HEADER
+                ================================================= */}
 
                 <div className="mb-10">
 
@@ -181,9 +738,13 @@ function CUFAnalysis() {
 
                 </div>
 
-                {/* PREMIUM TOP CARDS */}
+
+                {/* =================================================
+                    SUMMARY CARDS
+                ================================================= */}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-10">
+
 
                     {/* PLANT CAPACITY */}
 
@@ -201,7 +762,11 @@ function CUFAnalysis() {
 
                                 <p className="text-5xl font-black mt-5">
 
-                                    {plantCapacity}
+                                    {Number(
+                                        plantCapacity
+                                    ).toFixed(
+                                        2
+                                    )}
 
                                 </p>
 
@@ -222,6 +787,7 @@ function CUFAnalysis() {
                         </div>
 
                     </div>
+
 
                     {/* TODAY GENERATION */}
 
@@ -261,6 +827,7 @@ function CUFAnalysis() {
 
                     </div>
 
+
                     {/* TODAY CUF */}
 
                     <div className="bg-gradient-to-br from-yellow-500 to-orange-500 rounded-3xl shadow-2xl p-8 text-white hover:scale-[1.02] transition-all duration-300">
@@ -298,6 +865,7 @@ function CUFAnalysis() {
                         </div>
 
                     </div>
+
 
                     {/* OVERALL CUF */}
 
@@ -339,11 +907,15 @@ function CUFAnalysis() {
 
                 </div>
 
-                {/* CHART + PERFORMANCE */}
+
+                {/* =================================================
+                    MAIN CONTENT
+                ================================================= */}
 
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-10">
 
-                    {/* DAILY CUF CHART */}
+
+                    {/* DAILY CUF */}
 
                     <div className="bg-white rounded-3xl shadow-2xl p-8 border border-gray-100">
 
@@ -373,15 +945,21 @@ function CUFAnalysis() {
 
                         </div>
 
+
                         <CUFChart
 
-                            trendData={trendData}
+                            trendData={
+                                trendData
+                            }
 
-                            plantCapacity={plantCapacity}
+                            plantCapacity={
+                                plantCapacity
+                            }
 
                         />
 
                     </div>
+
 
                     {/* OVERALL PERFORMANCE */}
 
@@ -413,7 +991,9 @@ function CUFAnalysis() {
 
                         </div>
 
+
                         <div className="space-y-6">
+
 
                             {/* TOTAL GENERATION */}
 
@@ -433,6 +1013,7 @@ function CUFAnalysis() {
 
                             </div>
 
+
                             {/* TOTAL DAYS */}
 
                             <div className="bg-gradient-to-r from-green-100 to-emerald-100 p-6 rounded-3xl hover:scale-[1.01] transition-all duration-300">
@@ -450,6 +1031,7 @@ function CUFAnalysis() {
                                 </p>
 
                             </div>
+
 
                             {/* OVERALL CUF */}
 
@@ -478,8 +1060,8 @@ function CUFAnalysis() {
             </main>
 
         </div>
-
     )
 }
+
 
 export default CUFAnalysis

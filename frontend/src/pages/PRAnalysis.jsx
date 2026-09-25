@@ -1,35 +1,37 @@
 import { useEffect, useState } from "react"
-
 import axios from "axios"
 
 import Sidebar from "../components/Sidebar"
-
 import PRChart from "../charts/PRChart"
-
 import PRDonutChart from "../charts/PRDonutChart"
 
 import DatePicker from "react-datepicker"
-
 import "react-datepicker/dist/react-datepicker.css"
+
 
 function PRAnalysis() {
 
+    // ============================================================
     // DATE
+    // ============================================================
 
     const [selectedDate, setSelectedDate] =
         useState(new Date())
 
+
+    // ============================================================
     // DATA
+    // ============================================================
 
     const [trendData, setTrendData] =
         useState([])
 
+
+    // ============================================================
     // VALUES
+    // ============================================================
 
     const [irradiance, setIrradiance] =
-        useState(0)
-
-    const [avgPR, setAvgPR] =
         useState(0)
 
     const [plantCapacity, setPlantCapacity] =
@@ -38,159 +40,576 @@ function PRAnalysis() {
     const [dailyGeneration, setDailyGeneration] =
         useState(0)
 
+    const [performanceRatio, setPerformanceRatio] =
+        useState(0)
+
     const [performanceStatus, setPerformanceStatus] =
         useState("Good")
 
-    // FETCH DATA
+    const [loading, setLoading] =
+        useState(true)
 
-    useEffect(() => {
+    const [error, setError] =
+        useState("")
 
-        const formattedDate =
 
-            selectedDate
-                .toISOString()
-                .split("T")[0]
+    // ============================================================
+    // LOCAL DATE
+    // ============================================================
 
-        axios
-            .get(
+    const formatLocalDate = (date) => {
 
-                `https://rail.sustiknow.com/getOrders.php?date=${formattedDate}`
+        if (!date) return ""
 
-            )
+        const year =
+            date.getFullYear()
 
-            .then((res) => {
+        const month =
+            String(
+                date.getMonth() + 1
+            ).padStart(2, "0")
 
-                const apiData =
-                    res.data.data
+        const day =
+            String(
+                date.getDate()
+            ).padStart(2, "0")
 
-                // STORE DATA
+        return `${year}-${month}-${day}`
+    }
 
-                setTrendData(apiData)
 
-                // IRRADIANCE
+    // ============================================================
+    // CALCULATE DAILY GENERATION
+    //
+    // IMPORTANT:
+    //
+    // kwh = cumulative meter reading.
+    //
+    // Normally:
+    //
+    // Current kWh - Previous kWh
+    //
+    // If the meter suddenly decreases, it means the meter
+    // has reset / rolled over / changed baseline.
+    //
+    // In that situation we START A NEW GENERATION SEGMENT
+    // and ignore the previous segment.
+    //
+    // This prevents values such as:
+    //
+    // 18431.92 -> 18304.10
+    //
+    // from creating incorrect generation.
+    // ============================================================
 
-                const irr =
-                    parseFloat(
-                        res.data.irradiance[0].asi || 0
-                    )
+    const calculateGeneration = (data) => {
 
-                setIrradiance(irr)
+        if (
+            !Array.isArray(data) ||
+            data.length < 2
+        ) {
+            return 0
+        }
 
-                // PLANT CAPACITY
 
-                const capacity =
-                    parseFloat(
-                        res.data.plantkwp[0].capacity || 30
-                    )
+        let generation = 0
 
-                setPlantCapacity(capacity)
+        let previousKwh = null
 
-                // DAILY GENERATION
 
-                let totalGeneration = 0
+        for (let i = 0; i < data.length; i++) {
 
-                apiData.forEach((item) => {
-
-                    totalGeneration +=
-                        parseFloat(
-                            item.kwhgen || 0
-                        )
-
-                })
-
-                setDailyGeneration(
-                    totalGeneration.toFixed(2)
+            const currentKwh =
+                Number.parseFloat(
+                    data[i]?.kwh
                 )
 
-                // PEAK SUN HOURS
 
-                const peakSunHours =
-                    irr
+            // Ignore invalid meter values
+            if (!Number.isFinite(currentKwh)) {
+                continue
+            }
 
-                // PR CALCULATION
 
-                let pr = 0
+            // First valid reading
+            if (previousKwh === null) {
 
-                if (peakSunHours > 0) {
+                previousKwh =
+                    currentKwh
 
-                    pr = (
+                continue
+            }
 
-                        totalGeneration /
 
+            const difference =
+                currentKwh - previousKwh
+
+
+            // ====================================================
+            // NORMAL INCREMENT
+            // ====================================================
+
+            if (
+                Number.isFinite(difference) &&
+                difference >= 0
+            ) {
+
+                generation +=
+                    difference
+
+                previousKwh =
+                    currentKwh
+
+                continue
+            }
+
+
+            // ====================================================
+            // METER RESET
+            //
+            // Example:
+            //
+            // 18431.92
+            //      ↓
+            // 18304.10
+            //
+            // Do NOT add the negative difference.
+            //
+            // Start calculation again from the new baseline.
+            // ====================================================
+
+            if (difference < 0) {
+
+                generation = 0
+
+                previousKwh =
+                    currentKwh
+
+                continue
+            }
+        }
+
+
+        if (
+            !Number.isFinite(generation) ||
+            generation < 0
+        ) {
+            return 0
+        }
+
+
+        return generation
+    }
+
+
+    // ============================================================
+    // FETCH DATA
+    // ============================================================
+
+    const fetchData = async () => {
+
+        try {
+
+            setLoading(true)
+            setError("")
+
+
+            // ====================================================
+            // DATE
+            // ====================================================
+
+            const formattedDate =
+                formatLocalDate(
+                    selectedDate
+                )
+
+
+            // ====================================================
+            // API
+            // ====================================================
+
+            const response =
+                await axios.get(
+                    `https://rail.sustiknow.com/getOrders.php?date=${formattedDate}`
+                )
+
+
+            const apiData =
+                Array.isArray(
+                    response.data?.data
+                )
+                    ? response.data.data
+                    : []
+
+
+            // ====================================================
+            // NO DATA
+            // ====================================================
+
+            if (apiData.length === 0) {
+
+                setTrendData([])
+
+                setIrradiance(0)
+
+                setDailyGeneration(0)
+
+                setPerformanceRatio(0)
+
+                setPerformanceStatus(
+                    "Poor"
+                )
+
+                return
+            }
+
+
+            // ====================================================
+            // SORT DATA CHRONOLOGICALLY
+            // ====================================================
+
+            const sortedData =
+                [...apiData].sort(
+                    (a, b) => {
+
+                        const timeA =
+                            new Date(
+                                a?.ts || 0
+                            ).getTime()
+
+                        const timeB =
+                            new Date(
+                                b?.ts || 0
+                            ).getTime()
+
+                        return timeA - timeB
+                    }
+                )
+
+
+            setTrendData(
+                sortedData
+            )
+
+
+            // ====================================================
+            // IRRADIANCE
+            // ====================================================
+
+            const irr =
+                Number(
+                    response.data
+                        ?.irradiance
+                        ?.[0]
+                        ?.asi
+                ) || 0
+
+
+            setIrradiance(
+                irr
+            )
+
+
+            // ====================================================
+            // PLANT CAPACITY
+            // ====================================================
+
+            const capacity =
+                Number(
+                    response.data
+                        ?.plantkwp
+                        ?.[0]
+                        ?.capacity
+                ) || 30
+
+
+            setPlantCapacity(
+                capacity
+            )
+
+
+            // ====================================================
+            // DAILY GENERATION
+            // ====================================================
+
+            const generation =
+                calculateGeneration(
+                    sortedData
+                )
+
+
+            const safeGeneration =
+                Number.isFinite(
+                    generation
+                ) &&
+                    generation >= 0
+                    ? generation
+                    : 0
+
+
+            const roundedGeneration =
+                Number(
+                    safeGeneration.toFixed(2)
+                )
+
+
+            setDailyGeneration(
+                roundedGeneration
+            )
+
+
+            // ====================================================
+            // PERFORMANCE RATIO
+            //
+            // PR =
+            //
+            // Daily Generation
+            // -----------------------------
+            // Plant Capacity × Irradiance
+            //
+            // × 100
+            //
+            // Example:
+            //
+            // Generation = 8.35 kWh
+            // Capacity   = 30 kWp
+            // Irradiance = 3.99 kWh/m²/day
+            //
+            // PR = 8.35 / (30 × 3.99) × 100
+            //    = 6.98%
+            // ====================================================
+
+            let pr = 0
+
+
+            if (
+                capacity > 0 &&
+                irr > 0 &&
+                safeGeneration >= 0
+            ) {
+
+                pr =
+                    (
+                        safeGeneration /
                         (
                             capacity *
-                            peakSunHours
+                            irr
                         )
-
                     ) * 100
+            }
 
-                }
 
-                // LIMIT 0-100
+            // ====================================================
+            // INVALID PR PROTECTION
+            // ====================================================
 
-                pr = Math.min(
-                    Math.max(pr, 0),
+            if (
+                !Number.isFinite(pr) ||
+                pr < 0
+            ) {
+
+                pr = 0
+            }
+
+
+            // ====================================================
+            // LIMIT DISPLAY TO 100%
+            // ====================================================
+
+            pr =
+                Math.min(
+                    Math.max(
+                        pr,
+                        0
+                    ),
                     100
                 )
 
-                // ROUND VALUE
 
-                const roundedPR =
-                    Number(pr.toFixed(2))
+            const roundedPR =
+                Number(
+                    pr.toFixed(2)
+                )
 
-                setAvgPR(roundedPR)
 
-                // PERFORMANCE STATUS
+            setPerformanceRatio(
+                roundedPR
+            )
 
-                if (roundedPR >= 90) {
 
-                    setPerformanceStatus(
-                        "Excellent"
-                    )
+            // ====================================================
+            // PERFORMANCE STATUS
+            // ====================================================
 
-                } else if (roundedPR >= 80) {
+            if (roundedPR >= 90) {
 
-                    setPerformanceStatus(
-                        "Good"
-                    )
+                setPerformanceStatus(
+                    "Excellent"
+                )
 
-                } else if (roundedPR >= 70) {
+            } else if (roundedPR >= 80) {
 
-                    setPerformanceStatus(
-                        "Moderate"
-                    )
+                setPerformanceStatus(
+                    "Good"
+                )
 
-                } else {
+            } else if (roundedPR >= 70) {
 
-                    setPerformanceStatus(
-                        "Poor"
-                    )
+                setPerformanceStatus(
+                    "Moderate"
+                )
 
-                }
+            } else {
 
-            })
+                setPerformanceStatus(
+                    "Poor"
+                )
+            }
 
-            .catch((err) => {
 
-                console.log(err)
+        } catch (err) {
 
-            })
+            console.error(
+                "PR Analysis API Error:",
+                err
+            )
+
+
+            setError(
+                "Unable to load PR analysis data."
+            )
+
+        } finally {
+
+            setLoading(false)
+        }
+    }
+
+
+    // ============================================================
+    // LOAD DATA
+    // ============================================================
+
+    useEffect(() => {
+
+        fetchData()
+
+
+        const interval =
+            setInterval(
+                fetchData,
+                60000
+            )
+
+
+        return () => {
+
+            clearInterval(
+                interval
+            )
+        }
 
     }, [selectedDate])
+
+
+    // ============================================================
+    // LOADING
+    // ============================================================
+
+    if (loading) {
+
+        return (
+
+            <div className="min-h-screen bg-gradient-to-br from-slate-100 to-gray-200 flex">
+
+                <Sidebar />
+
+                <main className="flex-1 p-8">
+
+                    <div className="bg-white rounded-3xl shadow-2xl p-10 text-center">
+
+                        <p className="text-gray-500 font-semibold">
+
+                            Loading PR analysis...
+
+                        </p>
+
+                    </div>
+
+                </main>
+
+            </div>
+        )
+    }
+
+
+    // ============================================================
+    // ERROR
+    // ============================================================
+
+    if (error) {
+
+        return (
+
+            <div className="min-h-screen bg-gradient-to-br from-slate-100 to-gray-200 flex">
+
+                <Sidebar />
+
+                <main className="flex-1 p-8">
+
+                    <div className="bg-white rounded-3xl shadow-2xl p-10 text-center">
+
+                        <p className="text-red-500 font-semibold">
+
+                            {error}
+
+                        </p>
+
+
+                        <button
+                            onClick={fetchData}
+                            className="mt-5 px-6 py-3 rounded-xl bg-green-600 text-white font-bold hover:bg-green-700"
+                        >
+
+                            Retry
+
+                        </button>
+
+                    </div>
+
+                </main>
+
+            </div>
+        )
+    }
+
+
+    // ============================================================
+    // MAIN UI
+    // ============================================================
 
     return (
 
         <div className="min-h-screen bg-gradient-to-br from-slate-100 to-gray-200 flex">
 
-            {/* SIDEBAR */}
+
+            {/* ====================================================
+                SIDEBAR
+            ==================================================== */}
 
             <Sidebar />
 
-            {/* MAIN */}
+
+            {/* ====================================================
+                MAIN
+            ==================================================== */}
 
             <main className="flex-1 p-8 overflow-y-auto">
 
-                {/* HEADER */}
+
+                {/* =================================================
+                    HEADER
+                ================================================= */}
 
                 <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between mb-10 gap-5">
 
@@ -210,6 +629,7 @@ function PRAnalysis() {
 
                     </div>
 
+
                     {/* DATE PICKER */}
 
                     <div className="bg-white p-5 rounded-3xl shadow-2xl border border-gray-100">
@@ -220,15 +640,22 @@ function PRAnalysis() {
 
                         </h3>
 
+
                         <DatePicker
 
-                            selected={selectedDate}
-
-                            onChange={(date) =>
-
-                                setSelectedDate(date)
-
+                            selected={
+                                selectedDate
                             }
+
+                            onChange={(date) => {
+
+                                if (date) {
+
+                                    setSelectedDate(
+                                        date
+                                    )
+                                }
+                            }}
 
                             dateFormat="dd/MM/yyyy"
 
@@ -240,9 +667,13 @@ function PRAnalysis() {
 
                 </div>
 
-                {/* PREMIUM TOP CARDS */}
+
+                {/* =================================================
+                    PREMIUM TOP CARDS
+                ================================================= */}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-10">
+
 
                     {/* IRRADIANCE */}
 
@@ -260,7 +691,7 @@ function PRAnalysis() {
 
                                 <p className="text-5xl font-black mt-5">
 
-                                    {irradiance}
+                                    {irradiance.toFixed(2)}
 
                                 </p>
 
@@ -282,6 +713,7 @@ function PRAnalysis() {
 
                     </div>
 
+
                     {/* DAILY GENERATION */}
 
                     <div className="bg-gradient-to-br from-blue-600 to-cyan-500 rounded-3xl shadow-2xl p-8 text-white hover:scale-[1.02] transition-all duration-300">
@@ -298,7 +730,7 @@ function PRAnalysis() {
 
                                 <p className="text-5xl font-black mt-5">
 
-                                    {dailyGeneration}
+                                    {dailyGeneration.toFixed(2)}
 
                                 </p>
 
@@ -320,6 +752,7 @@ function PRAnalysis() {
 
                     </div>
 
+
                     {/* DAILY PR */}
 
                     <div className="bg-gradient-to-br from-green-600 to-emerald-500 rounded-3xl shadow-2xl p-8 text-white hover:scale-[1.02] transition-all duration-300">
@@ -336,7 +769,7 @@ function PRAnalysis() {
 
                                 <p className="text-5xl font-black mt-5">
 
-                                    {avgPR}
+                                    {performanceRatio.toFixed(2)}
 
                                 </p>
 
@@ -357,6 +790,7 @@ function PRAnalysis() {
                         </div>
 
                     </div>
+
 
                     {/* STATUS */}
 
@@ -398,11 +832,17 @@ function PRAnalysis() {
 
                 </div>
 
-                {/* DONUT + TREND */}
+
+                {/* =================================================
+                    DONUT + TREND
+                ================================================= */}
 
                 <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-10">
 
-                    {/* DONUT */}
+
+                    {/* =================================================
+                        DONUT
+                    ================================================= */}
 
                     <div className="bg-white rounded-3xl shadow-2xl p-8 border border-gray-100">
 
@@ -432,13 +872,19 @@ function PRAnalysis() {
 
                         </div>
 
+
                         <PRDonutChart
-                            pr={avgPR}
+                            pr={
+                                performanceRatio
+                            }
                         />
 
                     </div>
 
-                    {/* TREND */}
+
+                    {/* =================================================
+                        TREND
+                    ================================================= */}
 
                     <div className="xl:col-span-2 bg-white rounded-3xl shadow-2xl p-8 border border-gray-100">
 
@@ -468,13 +914,20 @@ function PRAnalysis() {
 
                         </div>
 
+
                         <PRChart
 
-                            trendData={trendData}
+                            trendData={
+                                trendData
+                            }
 
-                            irradiance={irradiance}
+                            irradiance={
+                                irradiance
+                            }
 
-                            plantCapacity={plantCapacity}
+                            plantCapacity={
+                                plantCapacity
+                            }
 
                         />
 
@@ -482,11 +935,12 @@ function PRAnalysis() {
 
                 </div>
 
+
             </main>
 
         </div>
-
     )
 }
+
 
 export default PRAnalysis

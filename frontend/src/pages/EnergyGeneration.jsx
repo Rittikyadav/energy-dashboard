@@ -1,115 +1,475 @@
 import { useEffect, useState } from "react"
-
 import axios from "axios"
 
 import Sidebar from "../components/Sidebar"
-
 import GenerationChart from "../charts/GenerationChart"
 
 import DatePicker from "react-datepicker"
-
 import "react-datepicker/dist/react-datepicker.css"
 
 function EnergyGeneration() {
 
-    // DATE
-
     const [selectedDate, setSelectedDate] =
         useState(new Date())
-
-    // API DATA
 
     const [trendData, setTrendData] =
         useState([])
 
-    // GENERATION
-
     const [todayGeneration, setTodayGeneration] =
-        useState("0")
+        useState("0.00")
 
     const [totalGeneration, setTotalGeneration] =
-        useState("0")
+        useState("0.00")
 
-    // FETCH DATA
+
+    // ============================================================
+    // LOCAL DATE
+    // ============================================================
+
+    const formatLocalDate = (date) => {
+
+        if (!date) return ""
+
+        const year =
+            date.getFullYear()
+
+        const month =
+            String(
+                date.getMonth() + 1
+            ).padStart(2, "0")
+
+        const day =
+            String(
+                date.getDate()
+            ).padStart(2, "0")
+
+        return `${year}-${month}-${day}`
+    }
+
+
+    // ============================================================
+    // PROCESS METER DATA
+    //
+    // IMPORTANT:
+    //
+    // We first find the MOST RECENT downward movement.
+    //
+    // Example:
+    //
+    // 18431.74
+    // 18431.92
+    // 18304.10  <-- RESET
+    // 18304.28
+    // 18304.47
+    //
+    // Everything BEFORE 18304.10 belongs to the previous
+    // meter session and must NOT contribute to today's
+    // generation.
+    // ============================================================
+
+    const processMeterData = (data) => {
+
+        if (!Array.isArray(data)) {
+            return []
+        }
+
+
+        // --------------------------------------------------------
+        // SORT OLD -> NEW
+        // --------------------------------------------------------
+
+        const sorted =
+            [...data].sort(
+                (a, b) => {
+
+                    const timeA =
+                        new Date(
+                            a?.ts || 0
+                        ).getTime()
+
+                    const timeB =
+                        new Date(
+                            b?.ts || 0
+                        ).getTime()
+
+                    return timeA - timeB
+                }
+            )
+
+
+        // --------------------------------------------------------
+        // FIND LATEST RESET
+        //
+        // A reset is detected when:
+        //
+        // current kWh < previous kWh
+        //
+        // We intentionally remember the LAST reset.
+        // --------------------------------------------------------
+
+        let latestResetIndex = -1
+
+        let previousKwh = null
+
+        for (
+            let i = 0;
+            i < sorted.length;
+            i++
+        ) {
+
+            const currentKwh =
+                Number.parseFloat(
+                    sorted[i]?.kwh
+                )
+
+
+            if (
+                !Number.isFinite(
+                    currentKwh
+                )
+            ) {
+                continue
+            }
+
+
+            if (
+                previousKwh !== null &&
+                currentKwh < previousKwh
+            ) {
+
+                latestResetIndex = i
+            }
+
+
+            previousKwh =
+                currentKwh
+        }
+
+
+        // --------------------------------------------------------
+        // KEEP ONLY DATA FROM LATEST RESET
+        //
+        // If no reset exists, keep everything.
+        // --------------------------------------------------------
+
+        const calculationData =
+            latestResetIndex >= 0
+                ? sorted.slice(
+                    latestResetIndex
+                )
+                : sorted
+
+
+        // --------------------------------------------------------
+        // CALCULATE GENERATION
+        // --------------------------------------------------------
+
+        let lastKwh = null
+
+        const processed =
+            calculationData.map(
+                (item, index) => {
+
+                    const currentKwh =
+                        Number.parseFloat(
+                            item?.kwh
+                        )
+
+
+                    // Invalid meter reading
+                    if (
+                        !Number.isFinite(
+                            currentKwh
+                        )
+                    ) {
+
+                        return {
+
+                            ...item,
+
+                            _kwh: null,
+
+                            _generated: 0,
+
+                            _reset: false,
+
+                            _calculationIndex:
+                                index
+                        }
+                    }
+
+
+                    // ------------------------------------------------
+                    // FIRST VALUE AFTER RESET
+                    //
+                    // This becomes the NEW BASELINE.
+                    // ------------------------------------------------
+
+                    if (
+                        lastKwh === null
+                    ) {
+
+                        lastKwh =
+                            currentKwh
+
+                        return {
+
+                            ...item,
+
+                            _kwh:
+                                currentKwh,
+
+                            _generated:
+                                0,
+
+                            _reset:
+                                true,
+
+                            _calculationIndex:
+                                index
+                        }
+                    }
+
+
+                    const difference =
+                        currentKwh -
+                        lastKwh
+
+
+                    // ------------------------------------------------
+                    // NORMAL INCREASE
+                    // ------------------------------------------------
+
+                    if (
+                        difference >= 0 &&
+                        difference <= 20
+                    ) {
+
+                        lastKwh =
+                            currentKwh
+
+                        return {
+
+                            ...item,
+
+                            _kwh:
+                                currentKwh,
+
+                            _generated:
+                                difference,
+
+                            _reset:
+                                false,
+
+                            _calculationIndex:
+                                index
+                        }
+                    }
+
+
+                    // ------------------------------------------------
+                    // ANOTHER RESET / BAD READING
+                    // ------------------------------------------------
+
+                    lastKwh =
+                        currentKwh
+
+                    return {
+
+                        ...item,
+
+                        _kwh:
+                            currentKwh,
+
+                        _generated:
+                            0,
+
+                        _reset:
+                            true,
+
+                        _calculationIndex:
+                            index
+                    }
+                }
+            )
+
+
+        return processed
+    }
+
+
+    // ============================================================
+    // FETCH API
+    // ============================================================
 
     useEffect(() => {
 
-        // FORMAT DATE
+        const date =
+            formatLocalDate(
+                selectedDate
+            )
 
-        const formattedDate =
 
-            selectedDate
-                .toISOString()
-                .split("T")[0]
+        setTrendData([])
+
+        setTodayGeneration(
+            "0.00"
+        )
+
+        setTotalGeneration(
+            "0.00"
+        )
+
 
         axios
             .get(
-
-                `https://rail.sustiknow.com/getOrders.php?date=${formattedDate}`
-
+                `https://rail.sustiknow.com/getOrders.php?date=${date}`
             )
+            .then(
+                (res) => {
 
-            .then((res) => {
+                    const apiData =
+                        Array.isArray(
+                            res.data?.data
+                        )
+                            ? res.data.data
+                            : []
 
-                const apiData =
-                    res.data.data
 
-                // STORE DATA
+                    if (
+                        apiData.length === 0
+                    ) {
 
-                setTrendData(apiData)
+                        return
+                    }
 
-                // TOTAL GENERATION
 
-                const lastEntry =
-                    apiData[apiData.length - 1]
+                    // ------------------------------------------------
+                    // PROCESS
+                    // ------------------------------------------------
 
-                setTotalGeneration(
+                    const processed =
+                        processMeterData(
+                            apiData
+                        )
 
-                    parseFloat(
-                        lastEntry.kwh || 0
-                    ).toFixed(2)
 
-                )
-
-                // TODAY GENERATION
-
-                let totalGen = 0
-
-                apiData.forEach((item) => {
-
-                    totalGen += parseFloat(
-                        item.kwhgen || 0
+                    setTrendData(
+                        processed
                     )
 
-                })
 
-                setTodayGeneration(
-                    totalGen.toFixed(2)
-                )
+                    // ------------------------------------------------
+                    // LATEST CUMULATIVE VALUE
+                    // ------------------------------------------------
 
-            })
+                    const latest =
+                        processed[
+                        processed.length - 1
+                        ]
 
-            .catch((err) => {
 
-                console.log(err)
+                    if (
+                        latest &&
+                        Number.isFinite(
+                            latest._kwh
+                        )
+                    ) {
 
-            })
+                        setTotalGeneration(
+                            latest._kwh.toFixed(2)
+                        )
+                    }
+
+
+                    // ------------------------------------------------
+                    // TOTAL GENERATION AFTER LATEST RESET
+                    //
+                    // IMPORTANT:
+                    //
+                    // We SUM ONLY the _generated values in the
+                    // post-reset dataset.
+                    // ------------------------------------------------
+
+                    const dailyGeneration =
+                        processed.reduce(
+                            (
+                                total,
+                                item
+                            ) => {
+
+                                const generation =
+                                    Number(
+                                        item?._generated ||
+                                        0
+                                    )
+
+
+                                if (
+                                    Number.isFinite(
+                                        generation
+                                    ) &&
+                                    generation > 0
+                                ) {
+
+                                    return (
+                                        total +
+                                        generation
+                                    )
+                                }
+
+
+                                return total
+                            },
+                            0
+                        )
+
+
+                    setTodayGeneration(
+                        dailyGeneration.toFixed(2)
+                    )
+                }
+            )
+            .catch(
+                (error) => {
+
+                    console.error(
+                        "Energy generation API error:",
+                        error
+                    )
+
+                    setTrendData([])
+
+                    setTodayGeneration(
+                        "0.00"
+                    )
+
+                    setTotalGeneration(
+                        "0.00"
+                    )
+                }
+            )
 
     }, [selectedDate])
+
+
+    // ============================================================
+    // UI
+    // ============================================================
 
     return (
 
         <div className="min-h-screen bg-gradient-to-br from-slate-100 to-gray-200 flex">
 
-            {/* SIDEBAR */}
-
             <Sidebar />
 
-            {/* MAIN */}
 
             <main className="flex-1 p-8 overflow-y-auto">
 
-                {/* HEADER */}
+
+                {/* =================================================
+                    HEADER
+                ================================================= */}
 
                 <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between mb-10 gap-5">
 
@@ -129,7 +489,8 @@ function EnergyGeneration() {
 
                     </div>
 
-                    {/* DATE PICKER */}
+
+                    {/* DATE */}
 
                     <div className="bg-white p-5 rounded-3xl shadow-2xl border border-gray-100">
 
@@ -141,12 +502,20 @@ function EnergyGeneration() {
 
                         <DatePicker
 
-                            selected={selectedDate}
+                            selected={
+                                selectedDate
+                            }
 
-                            onChange={(date) =>
+                            onChange={
+                                (date) => {
 
-                                setSelectedDate(date)
+                                    if (date) {
 
+                                        setSelectedDate(
+                                            date
+                                        )
+                                    }
+                                }
                             }
 
                             dateFormat="dd/MM/yyyy"
@@ -159,11 +528,15 @@ function EnergyGeneration() {
 
                 </div>
 
-                {/* PREMIUM TILES */}
+
+                {/* =================================================
+                    SUMMARY
+                ================================================= */}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
 
-                    {/* DAILY GENERATION */}
+
+                    {/* DAILY */}
 
                     <div className="bg-gradient-to-br from-blue-600 to-cyan-500 rounded-3xl shadow-2xl p-8 text-white hover:scale-[1.02] transition-all duration-300">
 
@@ -201,7 +574,8 @@ function EnergyGeneration() {
 
                     </div>
 
-                    {/* TOTAL GENERATION */}
+
+                    {/* CUMULATIVE */}
 
                     <div className="bg-gradient-to-br from-green-600 to-emerald-500 rounded-3xl shadow-2xl p-8 text-white hover:scale-[1.02] transition-all duration-300">
 
@@ -211,7 +585,7 @@ function EnergyGeneration() {
 
                                 <h3 className="text-lg font-semibold opacity-90">
 
-                                    Total Generation
+                                    Cumulative Energy
 
                                 </h3>
 
@@ -241,7 +615,10 @@ function EnergyGeneration() {
 
                 </div>
 
-                {/* CHART */}
+
+                {/* =================================================
+                    DAILY ENERGY TREND
+                ================================================= */}
 
                 <div className="bg-white rounded-3xl shadow-2xl p-8 mb-10 border border-gray-100">
 
@@ -257,11 +634,12 @@ function EnergyGeneration() {
 
                             <p className="text-gray-500 mt-2">
 
-                                Real-time solar generation curve
+                                Solar generation calculated from cumulative meter readings
 
                             </p>
 
                         </div>
+
 
                         <div className="bg-blue-100 text-blue-700 px-5 py-2 rounded-full font-bold">
 
@@ -271,15 +649,19 @@ function EnergyGeneration() {
 
                     </div>
 
+
                     <GenerationChart
-
-                        trendData={trendData}
-
+                        trendData={
+                            trendData
+                        }
                     />
 
                 </div>
 
-                {/* TABLE */}
+
+                {/* =================================================
+                    HISTORY
+                ================================================= */}
 
                 <div className="bg-white rounded-3xl shadow-2xl p-8 border border-gray-100">
 
@@ -301,6 +683,7 @@ function EnergyGeneration() {
 
                         </div>
 
+
                         <div className="bg-green-100 text-green-700 px-5 py-2 rounded-full font-bold">
 
                             UPDATED LIVE
@@ -308,6 +691,7 @@ function EnergyGeneration() {
                         </div>
 
                     </div>
+
 
                     <div className="overflow-x-auto rounded-2xl border border-gray-100">
 
@@ -331,7 +715,7 @@ function EnergyGeneration() {
 
                                     <th className="p-5 text-left text-gray-700 font-bold">
 
-                                        Total Energy
+                                        Cumulative Energy
 
                                     </th>
 
@@ -339,46 +723,77 @@ function EnergyGeneration() {
 
                             </thead>
 
+
                             <tbody>
 
                                 {trendData
+
                                     .slice(-20)
+
                                     .reverse()
-                                    .map((item, index) => (
 
-                                        <tr
+                                    .map(
+                                        (
+                                            item,
+                                            index
+                                        ) => (
 
-                                            key={index}
+                                            <tr
 
-                                            className="border-b hover:bg-blue-50 transition-all duration-200"
+                                                key={
+                                                    item?.id ||
+                                                    index
+                                                }
 
-                                        >
+                                                className="border-b hover:bg-blue-50 transition-all duration-200"
 
-                                            <td className="p-5 font-semibold text-gray-700">
+                                            >
 
-                                                {item.loghh}:{item.logmi}
+                                                <td className="p-5 font-semibold text-gray-700">
 
-                                            </td>
+                                                    {
+                                                        item?.loghh ||
+                                                        "--"
+                                                    }
 
-                                            <td className="p-5 text-green-600 font-bold text-lg">
+                                                    :
 
-                                                {parseFloat(
-                                                    item.kwhgen || 0
-                                                ).toFixed(2)} kWh
+                                                    {
+                                                        item?.logmi ||
+                                                        "--"
+                                                    }
 
-                                            </td>
+                                                </td>
 
-                                            <td className="p-5 text-blue-600 font-bold text-lg">
 
-                                                {parseFloat(
-                                                    item.kwh || 0
-                                                ).toFixed(2)} kWh
+                                                <td className="p-5 text-green-600 font-bold text-lg">
 
-                                            </td>
+                                                    {Number(
+                                                        item?._generated ||
+                                                        0
+                                                    ).toFixed(2)}
 
-                                        </tr>
+                                                    {" "}kWh
 
-                                    ))}
+                                                </td>
+
+
+                                                <td className="p-5 text-blue-600 font-bold text-lg">
+
+                                                    {Number(
+                                                        item?._kwh ??
+                                                        item?.kwh ??
+                                                        0
+                                                    ).toFixed(2)}
+
+                                                    {" "}kWh
+
+                                                </td>
+
+                                            </tr>
+
+                                        )
+                                    )}
 
                             </tbody>
 
@@ -391,7 +806,6 @@ function EnergyGeneration() {
             </main>
 
         </div>
-
     )
 }
 

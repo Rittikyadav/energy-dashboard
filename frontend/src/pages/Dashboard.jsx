@@ -4,6 +4,8 @@
 
 import { useEffect, useState } from "react"
 
+import { useNavigate } from "react-router-dom"
+
 import axios from "axios"
 
 import { io } from "socket.io-client"
@@ -30,13 +32,18 @@ import CurrentChart from "../charts/CurrentChart"
 
 import { getSunData } from "../services/sunService"
 
-const socket = io("http://localhost:8000")
+const socket = io(import.meta.env.VITE_SOCKET_URL || window.location.origin)
 
 function Dashboard() {
+
+    const navigate = useNavigate()
 
     // ===============================
     // LIVE DATA
     // ===============================
+
+    const selectedAssignment = JSON.parse(
+        localStorage.getItem("selectedAssignment") || "null")
 
     const [liveData, setLiveData] =
         useState(null)
@@ -63,6 +70,16 @@ function Dashboard() {
 
     const [currentDate, setCurrentDate] =
         useState("")
+
+    // Date used for historical dashboard/API data
+    const [selectedDate, setSelectedDate] =
+        useState(() => {
+            const now = new Date()
+            const year = now.getFullYear()
+            const month = String(now.getMonth() + 1).padStart(2, "0")
+            const day = String(now.getDate()).padStart(2, "0")
+            return `${year}-${month}-${day}`
+        })
 
     // ===============================
     // RUNTIME
@@ -97,16 +114,57 @@ function Dashboard() {
 
     useEffect(() => {
 
-        socket.on("liveData", (data) => {
+        const handleLiveData = (data) => {
+
+            console.log("LIVE DATA RECEIVED:", data)
+
+            const assignment = JSON.parse(
+                localStorage.getItem("selectedAssignment") || "null"
+            )
+
+            if (!assignment) {
+                console.warn("No selected device assignment")
+                return
+            }
+
+            const database = data?.database
+
+            if (!database) {
+                console.warn("Live packet does not contain database mapping")
+                return
+            }
+
+            const meterMatch =
+                String(database.meter_id || "") ===
+                String(assignment.meter_id || "")
+
+            const gatewayMatch =
+                String(database.gateway_id || "") ===
+                String(assignment.gateway_id || "")
+
+            if (!meterMatch || !gatewayMatch) {
+                console.log("Ignoring live data from another device:", {
+                    receivedMeter: database.meter_id,
+                    assignedMeter: assignment.meter_id,
+                    receivedGateway: database.gateway_id,
+                    assignedGateway: assignment.gateway_id
+                })
+                return
+            }
+
+            console.log("Accepted live data:", {
+                plant: assignment.plantname,
+                meter: assignment.meter_name,
+                device: assignment.device_id
+            })
 
             setLiveData(data)
+        }
 
-        })
+        socket.on("liveData", handleLiveData)
 
         return () => {
-
-            socket.off("liveData")
-
+            socket.off("liveData", handleLiveData)
         }
 
     }, [])
@@ -121,7 +179,7 @@ function Dashboard() {
 
             .get(
 
-                "https://rail.sustiknow.com/getOrders.php?date=2026-05-22"
+                `https://rail.sustiknow.com/getOrders.php?date=${selectedDate}`
 
             )
 
@@ -307,7 +365,7 @@ function Dashboard() {
 
         })
 
-    }, [])
+    }, [selectedDate])
 
     // ===============================
     // LIVE CLOCK
@@ -389,6 +447,15 @@ function Dashboard() {
     }, [])
 
     // ===============================
+    // BACK TO DEVICE SELECTION
+    // ===============================
+
+    const handleBackToDevices = () => {
+        localStorage.removeItem("selectedAssignment")
+        navigate("/device-selection", { replace: true })
+    }
+
+    // ===============================
     // UI
     // ===============================
 
@@ -406,7 +473,7 @@ function Dashboard() {
 
                 {/* HEADER */}
 
-                <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between mb-10">
+                <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between mb-10 gap-5">
 
                     <div className="flex items-center gap-5">
 
@@ -426,15 +493,37 @@ function Dashboard() {
 
                             <h1 className="text-5xl font-black text-gray-800 tracking-tight">
 
-                                Solar SCADA Dashboard
+                                {selectedAssignment?.plantname ||
+                                    "Solar SCADA Dashboard"}
 
                             </h1>
 
                             <p className="text-gray-500 mt-3 text-lg">
 
-                                Real-Time Energy Monitoring Platform
+                                {selectedAssignment
+                                    ? `${selectedAssignment.meter_name} • Device ${selectedAssignment.device_id}`
+                                    : "Real-Time Energy Monitoring Platform"}
 
                             </p>
+
+                            <div className="mt-4 flex items-center gap-3">
+
+                                <label
+                                    htmlFor="dashboard-date"
+                                    className="text-sm font-semibold text-gray-500"
+                                >
+                                    Data Date
+                                </label>
+
+                                <input
+                                    id="dashboard-date"
+                                    type="date"
+                                    value={selectedDate}
+                                    onChange={(e) => setSelectedDate(e.target.value)}
+                                    className="px-4 py-2 rounded-xl border border-gray-200 shadow-sm font-semibold text-gray-700 bg-white"
+                                />
+
+                            </div>
 
                         </div>
 
@@ -454,6 +543,12 @@ function Dashboard() {
 
                     </div>
 
+                    <button
+                        onClick={handleBackToDevices}
+                        className="self-start xl:self-center px-6 py-4 rounded-2xl bg-white border border-green-200 text-green-700 font-bold shadow-lg hover:bg-green-50 hover:scale-[1.02] transition"
+                    >
+                        ← Back to Devices
+                    </button>
                 </div>
 
                 {/* KPI ROW */}
